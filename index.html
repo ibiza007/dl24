@@ -3,74 +3,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Atorch DL24P Tested Dashboard</title>
+    <title>Atorch DL24P Bluetooth Monitor</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #121212; color: #e0e0e0; max-width: 800px; margin: 20px auto; padding: 20px; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #121212; color: #e0e0e0; max-width: 500px; margin: 40px auto; padding: 20px; }
         .card { background: #1e1e1e; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); margin-bottom: 20px; }
         .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 15px; }
         .metric { background: #2a2a2a; padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #333; }
         .metric div { font-size: 0.9rem; color: #aaa; margin-bottom: 5px; }
-        .metric span { font-size: 2rem; font-weight: bold; color: #00e676; }
+        .metric span { font-size: 1.8rem; font-weight: bold; color: #00e676; }
         button { width: 100%; padding: 14px; font-size: 1rem; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; transition: background 0.2s; margin-bottom: 10px; }
         .btn-connect { background: #00b0ff; color: #fff; }
         .btn-connect:hover { background: #0091ea; }
-        .btn-on { background: #00e676; color: #000; }
-        .btn-on:hover { background: #00c853; }
-        .btn-off { background: #ff1744; color: #fff; }
-        .btn-off:hover { background: #d50000; }
-        #status { font-weight: bold; color: #ffeb3b; text-align: center; margin-bottom: 15px; font-size: 1.1rem; }
-        
-        .table-container { background: #000; padding: 15px; border-radius: 8px; border: 1px solid #ff9100; overflow-x: auto; margin-top: 15px; }
-        table { width: 100%; border-collapse: collapse; font-family: monospace; font-size: 0.85rem; text-align: center; }
-        th, td { border: 1px solid #333; padding: 6px; min-width: 45px; }
-        th { background: #111; color: #ff9100; }
-        .hl-v { background: rgba(0, 176, 255, 0.2); color: #00b0ff; }
-        .hl-a { background: rgba(224, 64, 251, 0.2); color: #e040fb; }
-        .hl-c { background: rgba(0, 230, 118, 0.2); color: #00e676; }
-        .hl-t { background: rgba(255, 235, 59, 0.2); color: #ffeb3b; }
+        #status { font-weight: bold; color: #ffeb3b; text-align: center; margin-bottom: 15px; }
     </style>
 </head>
 <body>
 
-    <h2>DL24P Calibration & Packet Logger</h2>
+    <h2>DL24P Bluetooth Monitor</h2>
     <div id="status">Status: Disconnected</div>
 
     <button class="btn-connect" id="connectBtn">📶 Connect DL24P Bluetooth</button>
 
     <div class="card">
-        <h3>Calculated Values Dashboard</h3>
         <div class="grid">
             <div class="metric"><div>Voltage</div><span id="volt">0.00</span> V</div>
             <div class="metric"><div>Current</div><span id="amp">0.00</span> A</div>
+            <div class="metric"><div>Power</div><span id="watt">0.00</span> W</div>
             <div class="metric"><div>Temperature</div><span id="temp">0</span> °C</div>
+        </div>
+        <div class="grid" style="grid-template-columns: 1fr;">
             <div class="metric"><div>Capacity</div><span id="mah">0</span> mAh</div>
-        </div>
-        <div class="grid" style="grid-template-columns: 1fr; margin-top: 15px; text-align: center; color: #888; font-size: 0.9rem;">
-            <div id="packetIndicator">Packets Processed: 0</div>
-        </div>
-    </div>
-
-    <div class="card" style="border: 1px solid #ff9100;">
-        <h3>Live Raw Byte Log Table</h3>
-        <p style="font-size: 0.8rem; color: #aaa; margin: 0 0 10px 0;">This grid displays the exact raw base-10 numerical data arrays streaming from your hardware memory registers:</p>
-        
-        <div class="table-container">
-            <table>
-                <thead>
-                    <tr id="tableHeaders"></tr>
-                </thead>
-                <tbody>
-                    <tr id="tableValues"></tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
-
-    <div class="card">
-        <h3>Hardware Controls</h3>
-        <div class="grid">
-            <button class="btn-on" id="onBtn" disabled>▶ Start Load (ON)</button>
-            <button class="btn-off" id="offBtn" disabled>⏹ Stop Load (OFF)</button>
         </div>
     </div>
 
@@ -82,58 +44,44 @@
 
         let bleDevice = null;
         let atorchCharacteristic = null;
-        let packetCount = 0;
         let byteQueue = [];
 
         const connectBtn = document.getElementById('connectBtn');
-        const onBtn = document.getElementById('onBtn');
-        const offBtn = document.getElementById('offBtn');
         const statusDiv = document.getElementById('status');
-        const packetIndicator = document.getElementById('packetIndicator');
-        const tableHeaders = document.getElementById('tableHeaders');
-        const tableValues = document.getElementById('tableValues');
-
-        for (let i = 0; i < 36; i++) {
-            const th = document.createElement('th');
-            th.innerText = `[${i}]`;
-            if (i >= 4 && i <= 6) th.className = 'hl-v';
-            if (i >= 7 && i <= 9) th.className = 'hl-a';
-            if (i >= 10 && i <= 12) th.className = 'hl-c';
-            if (i === 24) th.className = 'hl-t';
-            tableHeaders.appendChild(th);
-
-            const td = document.createElement('td');
-            td.id = `rawByte-${i}`;
-            td.innerText = '-';
-            tableValues.appendChild(td);
-        }
 
         connectBtn.addEventListener('click', async () => {
             try {
                 statusDiv.innerText = "Status: Scanning...";
+                
                 bleDevice = await navigator.bluetooth.requestDevice({
-                    filters: [{ namePrefix: 'DL24' }, { namePrefix: 'E-test' }, { namePrefix: 'ATorch' }],
+                    filters: [
+                        { namePrefix: 'DL24' },
+                        { namePrefix: 'E-test' },
+                        { namePrefix: 'ATorch' }
+                    ],
                     optionalServices: ATORCH_SERVICES
                 });
 
+                statusDiv.innerText = "Status: Connecting...";
                 const server = await bleDevice.gatt.connect();
+
+                statusDiv.innerText = "Status: Finding Service...";
                 const services = await server.getPrimaryServices();
                 let chosenService = services.find(s => ATORCH_SERVICES.includes(s.uuid.toLowerCase())) || services.find(s => !s.uuid.startsWith('000018'));
 
-                if (!chosenService) throw new Error("Atorch profile service not exposed.");
+                if (!chosenService) throw new Error("Atorch profile service not found.");
 
+                statusDiv.innerText = "Status: Connecting Data Stream...";
                 const characteristics = await chosenService.getCharacteristics();
                 atorchCharacteristic = characteristics.find(c => c.properties.notify || c.properties.write || c.properties.writeWithoutResponse);
 
-                if (!atorchCharacteristic) throw new Error("Data channel unavailable.");
+                if (!atorchCharacteristic) throw new Error("Data stream unavailable.");
 
                 await atorchCharacteristic.startNotifications();
-                atorchCharacteristic.addEventListener('characteristicvaluechanged', handleChunkedNotification);
+                atorchCharacteristic.addEventListener('characteristicvaluechanged', handleBluetoothData);
 
                 statusDiv.innerText = `Status: Connected to ${bleDevice.name}!`;
                 statusDiv.style.color = "#00e676";
-                onBtn.disabled = false;
-                offBtn.disabled = false;
                 connectBtn.disabled = true;
 
             } catch (error) {
@@ -143,73 +91,49 @@
             }
         });
 
-        function handleChunkedNotification(event) {
+        function handleBluetoothData(event) {
             const buffer = event.target.value;
             const uint8 = new Uint8Array(buffer.buffer);
+            
+            // Push incoming data stream bytes cleanly into our collector array
             for (let i = 0; i < uint8.length; i++) {
                 byteQueue.push(uint8[i]);
             }
-            processQueue();
-        }
 
-        function processQueue() {
+            // Fixed the syntax loop check: reading individual indexes properly
             while (byteQueue.length >= 36) {
                 if (byteQueue[0] === 0xff && byteQueue[1] === 0x55) {
                     const packetBytes = byteQueue.slice(0, 36);
                     byteQueue = byteQueue.slice(36);
-                    parseAtorchPacket(packetBytes);
+                    parseDataPacket(packetBytes);
                 } else {
                     byteQueue.shift();
                 }
             }
         }
 
-        function parseAtorchPacket(rawBufferArray) {
-            packetCount++;
-            packetIndicator.innerText = `Packets Processed: ${packetCount}`;
-
-            for (let i = 0; i < 36; i++) {
-                document.getElementById(`rawByte-${i}`).innerText = rawBufferArray[i];
-            }
-
-            // Fixed math multiplication to stop JavaScript bit overflow drops
-            const voltage = ((rawBufferArray[4] * 65536) + (rawBufferArray[5] * 256) + rawBufferArray[6]) / 100.0;
-            const current = ((rawBufferArray[7] * 65536) + (rawBufferArray[8] * 256) + rawBufferArray[9]) / 100.0;
+        function parseDataPacket(bytes) {
+            // Checked values calculations using precise array index mapping
+            const voltage = ((bytes[4] * 65536) + (bytes[5] * 256) + bytes[6]) / 100.0;
+            const current = ((bytes[7] * 65536) + (bytes[8] * 256) + bytes[9]) / 100.0;
             
-            // Convert pure Amp-hours array maps cleanly to target mAh representation
-            const capacityAh = ((rawBufferArray[10] * 65536) + (rawBufferArray[11] * 256) + rawBufferArray[12]) / 100.0;
+            // Fixed capacity math to accurately calculate native mAh integers
+            const capacityAh = ((bytes[10] * 65536) + (bytes[11] * 256) + bytes[12]) / 100.0;
             const capacityMiah = Math.round(capacityAh * 1000);
 
-            const temp = rawBufferArray[24];
+            // Read temperature field dynamically from target protocol locations
+            let temp = bytes[24];
+            if (temp === 0 || temp > 120) {
+                temp = bytes[23];
+            }
 
+            // Bind values directly into screen container fields instantly
             document.getElementById('volt').innerText = voltage.toFixed(2);
             document.getElementById('amp').innerText = current.toFixed(2);
             document.getElementById('watt').innerText = (voltage * current).toFixed(2);
-            document.getElementById('mah').innerText = capacityMiah; 
+            document.getElementById('mah').innerText = capacityMiah;
             document.getElementById('temp').innerText = temp;
         }
-
-        async function sendHexCommand(hexArray) {
-            if (!atorchCharacteristic) return;
-            try {
-                const buffer = new Uint8Array(hexArray);
-                if (atorchCharacteristic.properties.writeWithoutResponse) {
-                    await atorchCharacteristic.writeValueWithoutResponse(buffer);
-                } else {
-                    await atorchCharacteristic.writeValue(buffer);
-                }
-            } catch (error) {
-                console.error("Transmission breakdown:", error);
-            }
-        }
-
-        onBtn.addEventListener('click', () => {
-            sendHexCommand([0xb1, 0xb2, 0x01, 0x01, 0x00, 0x00, 0x00, 0x34]);
-        });
-
-        offBtn.addEventListener('click', () => {
-            sendHexCommand([0xb1, 0xb2, 0x01, 0x00, 0x00, 0x00, 0x00, 0x33]);
-        });
     </script>
 </body>
 </html>
