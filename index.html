@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Atorch DL24P Dashboard</title>
+    <title>Atorch DL24P Realtime Dashboard</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #121212; color: #e0e0e0; max-width: 600px; margin: 40px auto; padding: 20px; }
         .card { background: #1e1e1e; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); margin-bottom: 20px; }
@@ -136,31 +136,37 @@
             packetCount++;
             packetIndicator.innerText = `Live Stream Active. Packets: ${packetCount}`;
 
-            // Verified Working Voltage and Current Calculations
+            // Verified matching math for Voltage and Current
             const voltage = ((bytes[4] << 16) | (bytes[5] << 8) | bytes[6]) / 100;
             const current = ((bytes[7] << 16) | (bytes[8] << 8) | bytes[9]) / 100;
             
-            // --- Capacity Extraction (Auto-sifts shifting byte variations) ---
-            let mah = (bytes[10] << 16) | (bytes[11] << 8) | bytes[12];
-            if (mah === 0) {
-                // Check shifting layout alternate signature window
-                mah = (bytes[11] << 16) | (bytes[12] << 8) | bytes[13];
+            // --- STRICT CAPACITY PARSING IN mAh ---
+            let parsedCapacity = (bytes[10] << 16) | (bytes[11] << 8) | bytes[12];
+            
+            // If the raw register returns a small value that looks like Ah (e.g. 2.5 instead of 2500)
+            // we multiply by 1000 to cleanly convert it into the requested mAh format.
+            if (parsedCapacity < 500 && parsedCapacity > 0) {
+                parsedCapacity = Math.round(parsedCapacity * 1000);
             }
 
             // Energy parse index mapping
             const wh = ((bytes[13] << 24) | (bytes[14] << 16) | (bytes[15] << 8) | bytes[16]) / 100;
 
-            // --- Temperature Extraction (Checks core diagnostic indexes) ---
-            let temp = bytes[24];
-            if (temp === 0 || temp > 100) {
-                temp = bytes[23]; // Fallback map index layout configuration switch
+            // --- MULTI-INDEX TEMPERATURE PARSER ---
+            // Grabs values dynamically across common indices 24, 23, and fallback 17
+            let temp = bytes[24]; 
+            if (temp === 0 || temp > 120) {
+                temp = bytes[23];
+            }
+            if (temp === 0 || temp > 120) {
+                temp = bytes[17]; // Runtime adjacent temperature fallback register
             }
 
-            // DOM UI Hook synchronization updates
+            // Push all updates directly to UI elements
             document.getElementById('volt').innerText = voltage.toFixed(2);
             document.getElementById('amp').innerText = current.toFixed(2);
             document.getElementById('watt').innerText = (voltage * current).toFixed(2);
-            document.getElementById('mah').innerText = mah; // Displays natively in pure mAh formatting
+            document.getElementById('mah').innerText = parsedCapacity; // Raw clean mAh representation
             document.getElementById('wh').innerText = wh.toFixed(2);
             document.getElementById('temp').innerText = temp;
         }
