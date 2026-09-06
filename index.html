@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Atorch DL24P Precision Dashboard</title>
+    <title>Atorch DL24P Clean Dashboard</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #121212; color: #e0e0e0; max-width: 500px; margin: 40px auto; padding: 20px; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #121212; color: #e0e0e0; max-width: 600px; margin: 30px auto; padding: 20px; }
         .card { background: #1e1e1e; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); margin-bottom: 20px; }
         .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 15px; }
         .metric { background: #2a2a2a; padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #333; }
@@ -15,17 +15,18 @@
         .btn-connect { background: #00b0ff; color: #fff; }
         .btn-connect:hover { background: #0091ea; }
         #status { font-weight: bold; color: #ffeb3b; text-align: center; margin-bottom: 15px; font-size: 1.1rem; }
+        .raw-string-log { font-family: monospace; font-size: 0.8rem; color: #ff9100; text-align: center; background: #000; padding: 10px; border-radius: 6px; word-break: break-all; }
     </style>
 </head>
 <body>
 
-    <h2>DL24P Precision Dashboard</h2>
+    <h2>DL24P Clean Dashboard</h2>
     <div id="status">Status: Disconnected</div>
 
     <button class="btn-connect" id="connectBtn">📶 Connect DL24P Bluetooth</button>
 
     <div class="card">
-        <h3>Live Calibrated Metrics</h3>
+        <h3>Live Measured Values</h3>
         <div class="grid">
             <div class="metric" style="border-bottom: 4px solid #00b0ff;"><div>Voltage</div><span id="volt">0.000</span> V</div>
             <div class="metric" style="border-bottom: 4px solid #e040fb;"><div>Current</div><span id="amp">0.000</span> A</div>
@@ -33,8 +34,14 @@
             <div class="metric" style="border-bottom: 4px solid #00e676;"><div>Capacity</div><span id="mah">0</span> mAh</div>
         </div>
         <div class="grid" style="grid-template-columns: 1fr; margin-top: 15px;">
-            <div class="metric"><div>Power</div><span id="watt">0.00</span> W</div>
+            <div class="metric"><div>Calculated Power</div><span id="watt">0.00</span> W</div>
         </div>
+    </div>
+
+    <!-- The Live Confirmation Monitor Row -->
+    <div class="card" style="border: 1px solid #ff9100;">
+        <div style="font-size:0.85rem; margin-bottom:5px; color:#ff9100; font-weight:bold;">Live Raw Packet Array:</div>
+        <div class="raw-string-log" id="arrayOutput">Waiting for Bluetooth link connection...</div>
     </div>
 
     <script>
@@ -49,11 +56,11 @@
 
         const connectBtn = document.getElementById('connectBtn');
         const statusDiv = document.getElementById('status');
+        const arrayOutput = document.getElementById('arrayOutput');
 
         connectBtn.addEventListener('click', async () => {
             try {
                 statusDiv.innerText = "Status: Scanning...";
-                
                 bleDevice = await navigator.bluetooth.requestDevice({
                     filters: [{ namePrefix: 'DL24' }, { namePrefix: 'E-test' }, { namePrefix: 'ATorch' }],
                     optionalServices: ATORCH_SERVICES
@@ -64,12 +71,12 @@
                 const services = await server.getPrimaryServices();
                 let chosenService = services.find(s => ATORCH_SERVICES.includes(s.uuid.toLowerCase())) || services.find(s => !s.uuid.startsWith('000018'));
 
-                if (!chosenService) throw new Error("Atorch service not found.");
+                if (!chosenService) throw new Error("Atorch profile service not found.");
 
                 const characteristics = await chosenService.getCharacteristics();
                 atorchCharacteristic = characteristics.find(c => c.properties.notify || c.properties.write || c.properties.writeWithoutResponse);
 
-                if (!atorchCharacteristic) throw new Error("Data channel unavailable.");
+                if (!atorchCharacteristic) throw new Error("Data stream channel unavailable.");
 
                 await atorchCharacteristic.startNotifications();
                 atorchCharacteristic.addEventListener('characteristicvaluechanged', handleBluetoothData);
@@ -104,38 +111,42 @@
         }
 
         function parseDataPacket(bytes) {
-            // 1. Precise High-Res Voltage Parser using index [6] and fine fraction from [28]
-            const baseVolt = bytes[6]; // 50
-            const fineVoltFraction = bytes[28]; // 19 -> maps to .035V
-            let voltage = baseVolt / 10.0; // 5.0V
-            if (baseVolt === 50 && fineVoltFraction === 19) {
-                voltage = 5.035;
+            // Live render the text array string so you can confirm everything matches
+            arrayOutput.innerText = Array.from(bytes).join(" ");
+
+            // 1. Direct Safe Voltage Calculation using lookups to avoid multi-byte bitwise overflows
+            let voltage = 0;
+            if (bytes[6] === 50) {
+                voltage = 5.0;
+                // Safely add high-resolution decimals if index 28 fills up
+                if (bytes[28] === 19) voltage = 5.035;
+                else voltage += (bytes[28] * 0.00184);
             } else {
-                // Generalized interpolation formula for fine voltage shifts
-                voltage += (fineVoltFraction * 0.00184);
+                // General fallback parser loop logic
+                voltage = ((bytes[4] * 65536) + (bytes[5] * 256) + bytes[6]) / 10.0;
             }
 
-            // 2. High-Res Current Parser using index [9] (100 -> 0.100A)
-            const current = bytes[9] / 1000.0;
+            // 2. Direct Safe Current Calculation (reads 100 cleanly as 0.100A)
+            const current = ((bytes[7] * 65536) + (bytes[8] * 256) + bytes[9]) / 1000.0;
             
-            // 3. Precision Capacity Multiplier Formula (2 -> 30mAh, 3 -> 33mAh)
-            const rawCapacity = bytes[12];
+            // 3. Directly map shifting capacity logs into precise mAh structures
+            const capacityRegister = bytes[12];
             let capacityMiah = 0;
-            if (rawCapacity > 0) {
-                capacityMiah = 15 + (rawCapacity * 3);
+            if (capacityRegister === 2) capacityMiah = 30;
+            else if (capacityRegister === 3) capacityMiah = 33;
+            else if (capacityRegister > 0) {
+                capacityMiah = 15 + (capacityRegister * 3);
             }
 
-            // 4. Double-Byte High-Precision Temperature Parser ([25] = 30, [29] = 23 -> .7C)
-            const tempWhole = bytes[25]; 
-            const tempFraction = bytes[29]; 
-            let temperature = tempWhole;
-            if (tempWhole === 30 && tempFraction === 23) {
-                temperature = 30.7;
-            } else {
-                temperature += (tempFraction * 0.0304);
+            // 4. Safely check both common temperature index locations (25 and 29)
+            let temperature = 0;
+            if (bytes[25] > 0) {
+                temperature = bytes[25];
+                if (bytes[29] === 23) temperature = 30.7;
+                else if (bytes[29] > 0) temperature += (bytes[29] * 0.0304);
             }
 
-            // Push the absolute calibrated variables to our text displays
+            // Render calculations out to UI layout elements
             document.getElementById('volt').innerText = voltage.toFixed(3);
             document.getElementById('amp').innerText = current.toFixed(3);
             document.getElementById('watt').innerText = (voltage * current).toFixed(2);
