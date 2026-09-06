@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Atorch DL24P Troubleshooting Console</title>
+    <title>Atorch DL24P Packet Logger Console</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #121212; color: #e0e0e0; max-width: 800px; margin: 20px auto; padding: 20px; }
         .card { background: #1e1e1e; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); margin-bottom: 20px; }
@@ -20,10 +20,10 @@
         .btn-off:hover { background: #d50000; }
         #status { font-weight: bold; color: #ffeb3b; text-align: center; margin-bottom: 15px; font-size: 1.1rem; }
         
-        /* Raw Log Table Layout */
+        /* Table Layout for displaying raw bytes */
         .table-container { background: #000; padding: 15px; border-radius: 8px; border: 1px solid #ff9100; overflow-x: auto; margin-top: 15px; }
         table { width: 100%; border-collapse: collapse; font-family: monospace; font-size: 0.85rem; text-align: center; }
-        th, td { border: 1px solid #333; padding: 6px; }
+        th, td { border: 1px solid #333; padding: 6px; min-width: 40px; }
         th { background: #111; color: #ff9100; }
         .hl-v { background: rgba(0, 176, 255, 0.2); color: #00b0ff; }
         .hl-a { background: rgba(224, 64, 251, 0.2); color: #e040fb; }
@@ -38,7 +38,7 @@
 
     <button class="btn-connect" id="connectBtn">📶 Connect DL24P Bluetooth</button>
 
-    <!-- 1. The Real Telemetry Boxes -->
+    <!-- Calculated Value Windows -->
     <div class="card">
         <h3>Calculated Values Dashboard</h3>
         <div class="grid">
@@ -52,10 +52,10 @@
         </div>
     </div>
 
-    <!-- 2. The Raw Decoded Stream Log Table -->
+    <!-- Live Raw Memory Data Log Table -->
     <div class="card" style="border: 1px solid #ff9100;">
         <h3>Live Raw Byte Log Table</h3>
-        <p style="font-size: 0.8rem; color: #aaa; margin: 0 0 10px 0;">This grid displays raw base-10 numerical data arrays streaming right out of your hardware chip memory slots:</p>
+        <p style="font-size: 0.8rem; color: #aaa; margin: 0 0 10px 0;">This grid displays the exact raw base-10 numerical data arrays streaming from your hardware memory registers:</p>
         
         <div class="table-container">
             <table>
@@ -69,7 +69,7 @@
         </div>
     </div>
 
-    <!-- 3. Load Operations Panel -->
+    <!-- Device Controller Operations -->
     <div class="card">
         <h3>Hardware Controls</h3>
         <div class="grid">
@@ -89,7 +89,7 @@
         let packetCount = 0;
         let byteQueue = [];
 
-        // DOM Element Definitions
+        // UI DOM Elements hooks
         const connectBtn = document.getElementById('connectBtn');
         const onBtn = document.getElementById('onBtn');
         const offBtn = document.getElementById('offBtn');
@@ -98,12 +98,11 @@
         const tableHeaders = document.getElementById('tableHeaders');
         const tableValues = document.getElementById('tableValues');
 
-        // Pre-build 36 log table rows
+        // Dynamically initialize our 36 visualization grid columns
         for (let i = 0; i < 36; i++) {
             const th = document.createElement('th');
             th.innerText = `[${i}]`;
             
-            // Apply targeted styling highlights matching syssi mappings
             if (i >= 4 && i <= 6) th.className = 'hl-v';
             if (i >= 7 && i <= 9) th.className = 'hl-a';
             if (i >= 10 && i <= 12) th.className = 'hl-c';
@@ -163,7 +162,7 @@
 
         function processQueue() {
             while (byteQueue.length >= 36) {
-                // Ensure header parsing boundaries match signature blocks correctly
+                // Ensure alignment matching signature header sequences (0xFF 0x55)
                 if (byteQueue[0] === 0xff && byteQueue[1] === 0x55) {
                     const packetBytes = byteQueue.slice(0, 36);
                     byteQueue = byteQueue.slice(36);
@@ -174,21 +173,14 @@
             }
         }
 
-        // FIXED ARRAY VARIABLE SPLICER METHOD
         function parseAtorchPacket(rawBufferArray) {
             packetCount++;
             packetIndicator.innerText = `Packets Processed: ${packetCount}`;
 
-            // Write raw decimal integer stream right onto logging table columns
+            // Render raw numerical data base-10 values directly onto data logs grid
             for (let i = 0; i < 36; i++) {
                 const cell = document.getElementById(`rawByte-${i}`);
                 cell.innerText = rawBufferArray[i];
-                
-                // Color match highlights
-                if (i >= 4 && i <= 6) cell.className = 'hl-v';
-                if (i >= 7 && i <= 9) cell.className = 'hl-a';
-                if (i >= 10 && i <= 12) cell.className = 'hl-c';
-                if (i === 24) cell.className = 'hl-t';
             }
 
             // 1. Voltage Conversion (Slots 4, 5, 6)
@@ -199,13 +191,22 @@
             const currentInt = (rawBufferArray[7] << 16) | (rawBufferArray[8] << 8) | rawBufferArray[9];
             const current = currentInt / 100.0;
 
-            // 3. Native Capacity Calculation mapped directly to pure mAh integers
+            // 3. Capacity Mapping (Slots 10, 11, 12) converted cleanly into requested mAh units
             const capacityAh = ((rawBufferArray[10] << 16) | (rawBufferArray[11] << 8) | rawBufferArray[12]) / 100.0;
             const capacityMiah = Math.round(capacityAh * 1000);
 
             // 4. Temperature Conversion (Slot 24)
             const temp = rawBufferArray[24];
 
-            // Render calculations out onto view parameters containers
+            // Direct DOM bindings updates targeting dashboard visual interface elements
             document.getElementById('volt').innerText = voltage.toFixed(2);
             document.getElementById('amp').innerText = current.toFixed(2);
+            document.getElementById('watt').innerText = (voltage * current).toFixed(2);
+            document.getElementById('mah').innerText = capacityMiah; 
+            document.getElementById('temp').innerText = temp;
+        }
+
+        async function sendHexCommand(hexArray) {
+            if (!atorchCharacteristic) return;
+            try {
+                const buffer = new Uint8Array(hexArray);
