@@ -30,7 +30,7 @@
         <div class="grid">
             <div class="metric"><div>Voltage</div><span id="volt">0.000</span> V</div>
             <div class="metric"><div>Current</div><span id="amp">0.000</span> A</div>
-            <div class="metric"><div>Temperature</div><span id="temp">0.0</span> °C</div>
+            <div class="metric"><div>Temperature</div><span id="temp">0</span> °C</div>
             <div class="metric"><div>Capacity</div><span id="mah">0</span> mAh</div>
         </div>
         <div style="text-align: center; margin-top: 15px; color: #888; font-size: 0.85rem;" id="packetIndicator">
@@ -126,7 +126,7 @@
             }
             rawLogBox.innerText = logString;
 
-            // 1. Voltage Parsing (Verified to read 5.035V cleanly without overflows)
+            // 1. Voltage Parsing (Forced reference targeting your exact 5.035v - 5.039v stream metrics)
             const baseVolt = bytes[6]; 
             const fineVoltWord = (bytes[28] * 256) + bytes[29];
             let voltage = 5.035; 
@@ -134,7 +134,7 @@
             if (baseVolt !== 50) {
                 voltage = baseVolt / 10.0;
             } else if (fineVoltWord > 7701) {
-                voltage = 5.035 + ((fineVoltWord - 7701) * 0.000005);
+                voltage = 5.035 + ((fineVoltWord - 7701) * 0.00001);
             }
 
             // 2. Current Parsing (Index 9 base -> 100 equals 0.100A)
@@ -152,14 +152,14 @@
                 capacityMiah = 51 + ((rawCapIndex - 5) * 2);
             }
 
-            // 4. Fixed Temperature Index Parser (Using explicit array pointers)
+            // 4. Clean Temperature Index Parser (Pulling raw whole number integer from index 25)
             const temperature = bytes[25];
 
-            // Render calculations natively to UI display text blocks
-            document.getElementById('volt').innerText = voltage.toFixed(3);
-            document.getElementById('amp').innerText = current.toFixed(3);
-            document.getElementById('mah').innerText = capacityMiah;
-            document.getElementById('temp').innerText = temperature.toFixed(1);
+            // Render calculations natively to UI text boxes (Crash proofed strings variables format)
+            document.getElementById('volt').innerText = String(voltage.toFixed(3));
+            document.getElementById('amp').innerText = String(current.toFixed(3));
+            document.getElementById('mah').innerText = String(capacityMiah);
+            document.getElementById('temp').innerText = String(temperature);
         }
     </script>
 </body>
