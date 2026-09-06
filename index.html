@@ -3,52 +3,84 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Atorch DL24P Realtime Dashboard</title>
+    <title>Atorch DL24P Diagnostics & Dashboard</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #121212; color: #e0e0e0; max-width: 600px; margin: 40px auto; padding: 20px; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #121212; color: #e0e0e0; max-width: 750px; margin: 30px auto; padding: 20px; }
         .card { background: #1e1e1e; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); margin-bottom: 20px; }
         .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 15px; }
-        .metric { background: #2a2a2a; padding: 15px; border-radius: 8px; text-align: center; }
+        .metric { background: #2a2a2a; padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #333; }
         .metric div { font-size: 0.9rem; color: #aaa; margin-bottom: 5px; }
-        .metric span { font-size: 1.8rem; font-weight: bold; color: #00e676; }
-        button { width: 100%; padding: 12px; font-size: 1rem; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; transition: background 0.2s; margin-bottom: 10px; }
+        .metric span { font-size: 2rem; font-weight: bold; color: #00e676; }
+        button { width: 100%; padding: 14px; font-size: 1rem; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; transition: background 0.2s; margin-bottom: 10px; }
         .btn-connect { background: #00b0ff; color: #fff; }
         .btn-connect:hover { background: #0091ea; }
         .btn-on { background: #00e676; color: #000; }
         .btn-on:hover { background: #00c853; }
         .btn-off { background: #ff1744; color: #fff; }
         .btn-off:hover { background: #d50000; }
-        #status { font-weight: bold; color: #ffeb3b; text-align: center; margin-bottom: 15px; }
-        #packetIndicator { text-align: center; font-size: 0.8rem; color: #00ff00; font-family: monospace; margin-top: 5px; }
+        #status { font-weight: bold; color: #ffeb3b; text-align: center; margin-bottom: 15px; font-size: 1.1rem; }
+        #packetIndicator { text-align: center; font-size: 0.85rem; color: #888; font-family: monospace; margin-top: 5px; }
+        
+        /* Analyzer Styles */
+        .log-container { background: #000; padding: 15px; border-radius: 8px; border: 1px solid #ff9100; font-family: monospace; margin-top: 10px; }
+        .hex-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 6px; text-align: center; font-size: 0.9rem; margin-top: 10px; color: #ff9100; }
+        .hex-byte { background: #141414; padding: 4px 2px; border-radius: 4px; border: 1px solid #222; position: relative; }
+        .hex-byte::after { content: attr(data-index); position: absolute; bottom: -12px; left: 0; width: 100%; font-size: 0.6rem; color: #555; }
+        .highlight-v { border-color: #00b0ff !important; color: #00b0ff !important; }
+        .highlight-a { border-color: #e040fb !important; color: #e040fb !important; }
+        .highlight-cap { border-color: #00e676 !important; color: #00e676 !important; }
+        .highlight-t { border-color: #ffeb3b !important; color: #ffeb3b !important; }
+        .legend { display: flex; flex-wrap: wrap; gap: 15px; margin-top: 20px; font-size: 0.8rem; justify-content: center; }
+        .legend-item { display: flex; align-items: center; gap: 5px; }
+        .legend-color { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
     </style>
 </head>
 <body>
 
-    <h2>DL24P Bluetooth Dashboard</h2>
+    <h2>Atorch DL24P Wirelessly Analyzer</h2>
     <div id="status">Status: Disconnected</div>
 
     <button class="btn-connect" id="connectBtn">📶 Connect DL24P Bluetooth</button>
 
     <div class="card">
-        <h3>Live Telemetry</h3>
+        <h3>Live Measurements Dashboard</h3>
         <div class="grid">
-            <div class="metric"><div>Voltage</div><span id="volt">0.00</span> V</div>
-            <div class="metric"><div>Current</div><span id="amp">0.00</span> A</div>
+            <div class="metric" style="border-left: 4px solid #00b0ff;"><div>Voltage</div><span id="volt">0.00</span> V</div>
+            <div class="metric" style="border-left: 4px solid #e040fb;"><div>Current</div><span id="amp">0.00</span> A</div>
             <div class="metric"><div>Power</div><span id="watt">0.00</span> W</div>
-            <div class="metric"><div>Temperature</div><span id="temp">0</span> °C</div>
+            <div class="metric" style="border-left: 4px solid #ffeb3b;"><div>Temperature</div><span id="temp">0</span> °C</div>
         </div>
         <div class="grid">
-            <div class="metric"><div>Capacity</div><span id="mah">0</span> mAh</div>
+            <div class="metric" style="border-left: 4px solid #00e676; grid-column: span 1;"><div>Capacity</div><span id="mah">0</span> mAh</div>
             <div class="metric"><div>Energy</div><span id="wh">0.00</span> Wh</div>
         </div>
-        <div id="packetIndicator">Live Stream Inactive</div>
+        <div id="packetIndicator">No stream stream processing active.</div>
+    </div>
+
+    <div class="card" style="border: 1px solid #ff9100;">
+        <h3>Raw Packet Analyzer (36-Byte Frame Buffer)</h3>
+        <p style="font-size:0.8rem; margin:0; color:#aaa;">Values update live below. Use byte markings to locate parameters:</p>
+        
+        <div class="log-container">
+            <div style="color: #666; font-size: 0.8rem; margin-bottom: 5px;">BYTE MATRIX LAYOUT [INDEX 0-35]</div>
+            <div class="hex-grid" id="hexContainer">
+                <!-- 36 items will be generated here -->
+            </div>
+            
+            <div class="legend">
+                <div class="legend-item"><span class="legend-color" style="background:#00b0ff;"></span> Volt [Bytes 4..6]</div>
+                <div class="legend-item"><span class="legend-color" style="background:#e040fb;"></span> Amp [Bytes 7..9]</div>
+                <div class="legend-item"><span class="legend-color" style="background:#00e676;"></span> Capacity [Bytes 10..12]</div>
+                <div class="legend-item"><span class="legend-color" style="background:#ffeb3b;"></span> Temp [Byte 24]</div>
+            </div>
+        </div>
     </div>
 
     <div class="card">
         <h3>Load Controls</h3>
         <div class="grid">
-            <button class="btn-on" id="onBtn" disabled>▶ Start Load</button>
-            <button class="btn-off" id="offBtn" disabled>⏹ Stop Load</button>
+            <button class="btn-on" id="onBtn" disabled>▶ Start Load (ON)</button>
+            <button class="btn-off" id="offBtn" disabled>⏹ Stop Load (OFF)</button>
         </div>
     </div>
 
@@ -63,11 +95,30 @@
         let packetCount = 0;
         let byteQueue = [];
 
+        // DOM Handles
         const connectBtn = document.getElementById('connectBtn');
         const onBtn = document.getElementById('onBtn');
         const offBtn = document.getElementById('offBtn');
         const statusDiv = document.getElementById('status');
         const packetIndicator = document.getElementById('packetIndicator');
+        const hexContainer = document.getElementById('hexContainer');
+
+        // Pre-build the 36 visualization grid items
+        for (let i = 0; i < 36; i++) {
+            const div = document.createElement('div');
+            div.className = 'hex-byte';
+            div.id = `byte-${i}`;
+            div.setAttribute('data-index', i);
+            div.innerText = '00';
+            
+            // Apply protocol-specific highlighting boundaries
+            if (i >= 4 && i <= 6) div.classList.add('highlight-v');
+            if (i >= 7 && i <= 9) div.classList.add('highlight-a');
+            if (i >= 10 && i <= 12) div.classList.add('highlight-cap');
+            if (i === 24) div.classList.add('highlight-t');
+            
+            hexContainer.appendChild(div);
+        }
 
         connectBtn.addEventListener('click', async () => {
             try {
@@ -82,7 +133,10 @@
                     optionalServices: ATORCH_SERVICES
                 });
 
+                statusDiv.innerText = "Status: Connecting to GATT Server...";
                 const server = await bleDevice.gatt.connect();
+
+                statusDiv.innerText = "Status: Discovering services...";
                 const services = await server.getPrimaryServices();
                 let chosenService = services.find(s => ATORCH_SERVICES.includes(s.uuid.toLowerCase())) || services.find(s => !s.uuid.startsWith('000018'));
 
@@ -116,82 +170,23 @@
             for (let i = 0; i < uint8.length; i++) {
                 byteQueue.push(uint8[i]);
             }
-
             processQueue();
         }
 
         function processQueue() {
             while (byteQueue.length >= 36) {
+                // Find matching Atorch header window boundary markers (0xFF 0x55)
                 if (byteQueue[0] === 0xff && byteQueue[1] === 0x55) {
                     const packetBytes = byteQueue.slice(0, 36);
                     byteQueue = byteQueue.slice(36);
                     parseAtorchPacket(packetBytes);
                 } else {
-                    byteQueue.shift();
+                    byteQueue.shift(); // Sift down queue until aligned
                 }
             }
         }
 
         function parseAtorchPacket(bytes) {
             packetCount++;
-            packetIndicator.innerText = `Live Stream Active. Packets: ${packetCount}`;
+            packetIndicator.innerText = `Live Stream Processing Active. Packets: ${packetCount}`;
 
-            // Verified matching math for Voltage and Current
-            const voltage = ((bytes[4] << 16) | (bytes[5] << 8) | bytes[6]) / 100;
-            const current = ((bytes[7] << 16) | (bytes[8] << 8) | bytes[9]) / 100;
-            
-            // --- STRICT CAPACITY PARSING IN mAh ---
-            let parsedCapacity = (bytes[10] << 16) | (bytes[11] << 8) | bytes[12];
-            
-            // If the raw register returns a small value that looks like Ah (e.g. 2.5 instead of 2500)
-            // we multiply by 1000 to cleanly convert it into the requested mAh format.
-            if (parsedCapacity < 500 && parsedCapacity > 0) {
-                parsedCapacity = Math.round(parsedCapacity * 1000);
-            }
-
-            // Energy parse index mapping
-            const wh = ((bytes[13] << 24) | (bytes[14] << 16) | (bytes[15] << 8) | bytes[16]) / 100;
-
-            // --- MULTI-INDEX TEMPERATURE PARSER ---
-            // Grabs values dynamically across common indices 24, 23, and fallback 17
-            let temp = bytes[24]; 
-            if (temp === 0 || temp > 120) {
-                temp = bytes[23];
-            }
-            if (temp === 0 || temp > 120) {
-                temp = bytes[17]; // Runtime adjacent temperature fallback register
-            }
-
-            // Push all updates directly to UI elements
-            document.getElementById('volt').innerText = voltage.toFixed(2);
-            document.getElementById('amp').innerText = current.toFixed(2);
-            document.getElementById('watt').innerText = (voltage * current).toFixed(2);
-            document.getElementById('mah').innerText = parsedCapacity; // Raw clean mAh representation
-            document.getElementById('wh').innerText = wh.toFixed(2);
-            document.getElementById('temp').innerText = temp;
-        }
-
-        async function sendHexCommand(hexArray) {
-            if (!atorchCharacteristic) return;
-            try {
-                const buffer = new Uint8Array(hexArray);
-                if (atorchCharacteristic.properties.writeWithoutResponse) {
-                    await atorchCharacteristic.writeValueWithoutResponse(buffer);
-                } else {
-                    await atorchCharacteristic.writeValue(buffer);
-                }
-            } catch (error) {
-                console.error("Command delivery failed:", error);
-            }
-        }
-
-        onBtn.addEventListener('click', () => {
-            sendHexCommand([0xb1, 0xb2, 0x01, 0x01, 0x00, 0x00, 0x00, 0x34]);
-        });
-
-        offBtn.addEventListener('click', () => {
-            sendHexCommand([0xb1, 0xb2, 0x01, 0x00, 0x00, 0x00, 0x00, 0x33]);
-        });
-    </script>
-</body>
-</html>
