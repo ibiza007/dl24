@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Atorch DL24 Web Bluetooth Controller</title>
+    <title>Atorch DL24P Wireless Dashboard</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #121212; color: #e0e0e0; max-width: 600px; margin: 40px auto; padding: 20px; }
         .card { background: #1e1e1e; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); margin-bottom: 20px; }
@@ -14,86 +14,96 @@
         button { width: 100%; padding: 12px; font-size: 1rem; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; transition: background 0.2s; margin-bottom: 10px; }
         .btn-connect { background: #00b0ff; color: #fff; }
         .btn-connect:hover { background: #0091ea; }
-        .btn-on { background: #00e676; color: #000; }
-        .btn-on:hover { background: #00c853; }
-        .btn-off { background: #ff1744; color: #fff; }
-        .btn-off:hover { background: #d50000; }
+        .btn-toggle { background: #ffeb3b; color: #000; }
+        .btn-toggle:hover { background: #fdd835; }
+        .btn-reset { background: #757575; color: #fff; }
+        .btn-reset:hover { background: #616161; }
         #status { font-weight: bold; color: #ffeb3b; text-align: center; margin-bottom: 15px; }
     </style>
 </head>
 <body>
 
-    <h2>Atorch DL24 Dashboard</h2>
+    <h2>Atorch DL24P Wireless Dashboard</h2>
     <div id="status">Status: Disconnected</div>
 
-    <button class="btn-connect" id="connectBtn">🔌 Connect DL24 Bluetooth</button>
+    <button class="btn-connect" id="connectBtn">📶 Connect DL24P Bluetooth</button>
 
     <div class="card">
-        <h3>Live Telemetry</h3>
+        <h3>Wireless Telemetry</h3>
         <div class="grid">
-            <div class="metric"><div>Voltage</div><span id="volt">0.00</span> V</div>
-            <div class="metric"><div>Current</div><span id="amp">0.00</span> A</div>
-            <div class="metric"><div>Power</div><span id="watt">0.00</span> W</div>
-            <div class="metric"><div>Temperature</div><span id="temp">0</span> °C</div>
+            <div class="metric"><div>Voltage</div><span id="volt">0.0</span> V</div>
+            <div class="metric"><div>Current</div><span id="amp">0.000</span> A</div>
+            <div class="metric"><div>Power</div><span id="watt">0.0</span> W</div>
+            <div class="metric"><div>Energy</div><span id="wh">0.000</span> Wh</div>
         </div>
-        <div class="grid">
-            <div class="metric"><div>Capacity</div><span id="mah">0</span> mAh</div>
-            <div class="metric"><div>Energy</div><span id="wh">0.00</span> Wh</div>
+        <div class="grid" style="grid-template-columns: 1fr;">
+            <div class="metric"><div>Capacity</div><span id="ah">0.000</span> Ah</div>
         </div>
     </div>
 
     <div class="card">
-        <h3>Load Controls</h3>
+        <h3>Controls</h3>
+        <button class="btn-toggle" id="toggleBtn" disabled>Toggle Load (On/Off)</button>
         <div class="grid">
-            <button class="btn-on" id="onBtn" disabled>▶ Start Load</button>
-            <button class="btn-off" id="offBtn" disabled>⏹ Stop Load</button>
+            <button class="btn-reset" id="resetWhBtn" disabled>Reset Wh</button>
+            <button class="btn-reset" id="resetAhBtn" disabled>Reset Ah</button>
         </div>
     </div>
 
     <script>
-        // Atorch DL24 specific BLE Custom UUIDs
-        const ATORCH_SERVICE_UUID = 0xff00; 
-        const ATORCH_CHAR_UUID    = 0xff02; 
+        // Custom Serial-Over-BLE Profile UUIDs utilized by Atorch components
+        const BT_SERIAL_SERVICE = '0000ffe0-0000-1000-8000-00805f9b34fb';
+        const BT_SERIAL_CHAR    = '0000ffe1-0000-1000-8000-00805f9b34fb';
 
         let bleDevice = null;
-        let atorchCharacteristic = null;
+        let serialCharacteristic = null;
+        let pollInterval = null;
+        let incomingTextBuffer = "";
 
         const connectBtn = document.getElementById('connectBtn');
-        const onBtn = document.getElementById('onBtn');
-        const offBtn = document.getElementById('offBtn');
+        const toggleBtn = document.getElementById('toggleBtn');
+        const resetWhBtn = document.getElementById('resetWhBtn');
+        const resetAhBtn = document.getElementById('resetAhBtn');
         const statusDiv = document.getElementById('status');
 
-        // Connect to BLE Device
         connectBtn.addEventListener('click', async () => {
             try {
-                statusDiv.innerText = "Status: Scanning...";
+                statusDiv.innerText = "Status: Scanning for Bluetooth Load...";
                 
                 bleDevice = await navigator.bluetooth.requestDevice({
                     filters: [
-                        { namePrefix: 'DL24' }, 
-                        { namePrefix: 'E-test' }
+                        { namePrefix: 'DL24' },
+                        { namePrefix: 'E-test' },
+                        { namePrefix: 'JDY' },
+                        { namePrefix: 'ATorch' }
                     ],
-                    optionalServices: [ATORCH_SERVICE_UUID]
+                    optionalServices: [BT_SERIAL_SERVICE]
                 });
 
-                statusDiv.innerText = "Status: Connecting to GATT Server...";
+                statusDiv.innerText = "Status: Linking to Wireless Profile...";
                 const server = await bleDevice.gatt.connect();
 
-                statusDiv.innerText = "Status: Fetching Atorch Service...";
-                const service = await server.getPrimaryService(ATORCH_SERVICE_UUID);
+                statusDiv.innerText = "Status: Accessing Serial Channel...";
+                const service = await server.getPrimaryService(BT_SERIAL_SERVICE);
+                serialCharacteristic = await service.getCharacteristic(BT_SERIAL_CHAR);
 
-                statusDiv.innerText = "Status: Fetching Characteristic...";
-                atorchCharacteristic = await service.getCharacteristic(ATORCH_CHAR_UUID);
+                // Listen for returning incoming texts from DL24P
+                await serialCharacteristic.startNotifications();
+                serialCharacteristic.addEventListener('characteristicvaluechanged', handleIncomingText);
 
-                // Enable real-time notifications from the DL24
-                await atorchCharacteristic.startNotifications();
-                atorchCharacteristic.addEventListener('characteristicvaluechanged', handleDataNotification);
-
-                statusDiv.innerText = `Status: Connected to ${bleDevice.name}`;
+                statusDiv.innerText = `Status: Connected Wirelessly to ${bleDevice.name}!`;
                 statusDiv.style.color = "#00e676";
-                onBtn.disabled = false;
-                offBtn.disabled = false;
+                
+                // Active options UI elements
+                toggleBtn.disabled = false;
+                resetWhBtn.disabled = false;
+                resetAhBtn.disabled = false;
                 connectBtn.disabled = true;
+
+                // Query data interval loop (matches readingDelay: 5 configuration)
+                pollInterval = setInterval(async () => {
+                    await sendTextCommand("values?\n");
+                }, 5000);
 
             } catch (error) {
                 console.error(error);
@@ -102,55 +112,65 @@
             }
         });
 
-        // Telemetry Data Parser for Atorch 36-byte Serial Packets
-        function handleDataNotification(event) {
-            const view = event.target.value;
+        // Processes continuous incoming chunks over the air
+        function handleIncomingText(event) {
+            const dataView = event.target.value;
+            const decoder = new TextDecoder('utf-8');
+            const chunk = decoder.decode(dataView);
             
-            // Atorch data broadcasts are typically 36 bytes long
-            if (view.byteLength < 36) return;
+            incomingTextBuffer += chunk;
 
-            // Header verification (0xff 0x55 0x01)
-            if (view.getUint8(0) === 0xff && view.getUint8(1) === 0x55) {
-                
-                // Parse metrics (Big Endian byte arrangements)
-                const voltage = (view.getUint8(4) << 16 | view.getUint8(5) << 8 | view.getUint8(6)) / 100;
-                const current = (view.getUint8(7) << 16 | view.getUint8(8) << 8 | view.getUint8(9)) / 100;
-                
-                // Cumulative Capacity & Energy values
-                const mah = (view.getUint8(10) << 16 | view.getUint8(11) << 8 | view.getUint8(12));
-                const wh = (view.getUint8(13) << 24 | view.getUint8(14) << 16 | view.getUint8(15) << 8 | view.getUint8(16)) / 100;
-                const temp = view.getUint8(24);
+            // Break up full transmission packets delimited by newlines
+            if (incomingTextBuffer.includes('\n') || incomingTextBuffer.includes('\r')) {
+                const lines = incomingTextBuffer.split(/[\r\n]+/);
+                incomingTextBuffer = lines.pop(); // Hold onto partial segments
 
-                // Update UI Display Elements
-                document.getElementById('volt').innerText = voltage.toFixed(2);
-                document.getElementById('amp').innerText = current.toFixed(2);
-                document.getElementById('watt').innerText = (voltage * current).toFixed(2);
-                document.getElementById('mah').innerText = mah;
-                document.getElementById('wh').innerText = wh.toFixed(2);
-                document.getElementById('temp').innerText = temp;
+                for (let line of lines) {
+                    if (line.trim().length > 0) {
+                        parseTextTelemetry(line.trim());
+                    }
+                }
             }
         }
 
-        // Send Commands to DL24 (Requires proper 8-byte framing structure)
-        async function sendCommand(commandBytes) {
-            if (!atorchCharacteristic) return;
+        // Translates space-separated text fields matching your configuration rules
+        function parseTextTelemetry(dataString) {
+            // Converts response strings (e.g., "12.4 1.503 18.6 0.450 5.620") into float formats
+            const values = dataString.split(/\s+/).map(Number);
+            
+            // Layout Verification mapping: Voltage, Current, Power, Capacity, Energy
+            if (values.length >= 5 && !values.some(isNaN)) {
+                document.getElementById('volt').innerText = values[0].toFixed(1);
+                document.getElementById('amp').innerText  = values[1].toFixed(3);
+                document.getElementById('watt').innerText = values[2].toFixed(1);
+                document.getElementById('ah').innerText   = values[3].toFixed(3);
+                document.getElementById('wh').innerText   = values[4].toFixed(3);
+            }
+        }
+
+        // Convey text scripts string over Bluetooth
+        async function sendTextCommand(textString) {
+            if (!serialCharacteristic) return;
             try {
-                const buffer = new Uint8Array(commandBytes);
-                await atorchCharacteristic.writeValue(buffer);
+                const encoder = new TextEncoder();
+                const buffer = encoder.encode(textString);
+                await serialCharacteristic.writeValue(buffer);
             } catch (error) {
-                console.error("Failed to send command:", error);
+                console.error("Transmission error:", error);
             }
         }
 
-        // Control Actions
-        onBtn.addEventListener('click', () => {
-            // DL24 Hex Command sequence to Turn ON the load
-            sendCommand([0xb1, 0xb2, 0x01, 0x01, 0x00, 0x00, 0x00, 0x34]);
+        // Action bindings directly mirrored from your setup instructions
+        toggleBtn.addEventListener('click', async () => {
+            await sendTextCommand("tx 0x32\n"); // On/Off control line item
         });
 
-        offBtn.addEventListener('click', () => {
-            // DL24 Hex Command sequence to Turn OFF the load
-            sendCommand([0xb1, 0xb2, 0x01, 0x00, 0x00, 0x00, 0x00, 0x33]);
+        resetWhBtn.addEventListener('click', async () => {
+            await sendTextCommand("tx 1\n");    // Reset accumulation counters
+        });
+
+        resetAhBtn.addEventListener('click', async () => {
+            await sendTextCommand("tx 2\n");
         });
     </script>
 </body>
