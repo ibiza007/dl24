@@ -204,3 +204,4 @@
                     await atorchCharacteristic.writeValue(buffer);
                 }
             } catch (error) {
+console.error("Transmission breakdown:", error);}}onBtn.addEventListener('click', () => {sendHexCommand([0xb1, 0xb2, 0x01, 0x01, 0x00, 0x00, 0x00, 0x34]);});offBtn.addEventListener('click', () => {sendHexCommand([0xb1, 0xb2, 0x01, 0x00, 0x00, 0x00, 0x00, 0x33]);});
