@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Atorch DL24P Bluetooth Dashboard</title>
+    <title>Atorch DL24P Live Dashboard</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #121212; color: #e0e0e0; max-width: 600px; margin: 40px auto; padding: 20px; }
         .card { background: #1e1e1e; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); margin-bottom: 20px; }
@@ -18,8 +18,8 @@
         .btn-on:hover { background: #00c853; }
         .btn-off { background: #ff1744; color: #fff; }
         .btn-off:hover { background: #d50000; }
-        #status { font-weight: bold; color: #ffeb3b; text-align: center; margin-bottom: 15px; word-wrap: break-word; }
-        #packetIndicator { text-align: center; font-size: 0.8rem; color: #888; font-family: monospace; margin-top: 5px; }
+        #status { font-weight: bold; color: #ffeb3b; text-align: center; margin-bottom: 15px; }
+        #packetIndicator { text-align: center; font-size: 0.8rem; color: #00ff00; font-family: monospace; margin-top: 5px; }
     </style>
 </head>
 <body>
@@ -53,7 +53,6 @@
     </div>
 
     <script>
-        // Standard Atorch BLE data service and transmission descriptors
         const ATORCH_SERVICES = [
             '0000ffe0-0000-1000-8000-00805f9b34fb',
             '0000ff00-0000-1000-8000-00805f9b34fb'
@@ -62,6 +61,9 @@
         let bleDevice = null;
         let atorchCharacteristic = null;
         let packetCount = 0;
+        
+        // Internal array buffer queue to hold fragmented wireless chunks
+        let byteQueue = [];
 
         const connectBtn = document.getElementById('connectBtn');
         const onBtn = document.getElementById('onBtn');
@@ -97,9 +99,8 @@
 
                 if (!atorchCharacteristic) throw new Error("Telemetry channel unavailable.");
 
-                // Register binary listener to process incoming hardware notifications directly
                 await atorchCharacteristic.startNotifications();
-                atorchCharacteristic.addEventListener('characteristicvaluechanged', handleBinaryDataNotification);
+                atorchCharacteristic.addEventListener('characteristicvaluechanged', handleChunkedNotification);
 
                 statusDiv.innerText = `Status: Connected to ${bleDevice.name}!`;
                 statusDiv.style.color = "#00e676";
@@ -114,44 +115,66 @@
             }
         });
 
-        // Binary Packet Parser mapped precisely to Atorch's 36-byte data layouts
-        function handleBinaryDataNotification(event) {
-            const view = event.target.value;
+        // Appends split incoming frames into our processing queue
+        function handleChunkedNotification(event) {
+            const buffer = event.target.value.buffer;
+            const uint8 = new Uint8Array(buffer);
             
-            // Ignore incomplete fragments; full Atorch frames are 36 bytes long
-            if (view.byteLength < 36) return;
+            // Push incoming bytes into the queue array
+            for (let i = 0; i < uint8.length; i++) {
+                byteQueue.push(uint8[i]);
+            }
 
-            // Header matching signature: 0xFF 0x55 0x01
-            if (view.getUint8(0) === 0xff && view.getUint8(1) === 0x55) {
-                packetCount++;
-                packetIndicator.innerText = `Packets Received: ${packetCount}`;
+            // Look through the storage array to find and parse whole packets
+            processQueue();
+        }
 
-                // Extract fields by bit-shifting byte offsets (Big Endian arrangement)
-                const voltage = (view.getUint8(4) << 16 | view.getUint8(5) << 8 | view.getUint8(6)) / 100;
-                const current = (view.getUint8(7) << 16 | view.getUint8(8) << 8 | view.getUint8(9)) / 100;
+        function processQueue() {
+            // Keep scanning the queue while it contains enough bytes for a frame
+            while (byteQueue.length >= 36) {
                 
-                // Read capacity (Ah) and accumulated Energy (Wh) values
-                const mah = (view.getUint8(10) << 16 | view.getUint8(11) << 8 | view.getUint8(12));
-                const wh = (view.getUint8(13) << 24 | view.getUint8(14) << 16 | view.getUint8(15) << 8 | view.getUint8(16)) / 100;
-                
-                const temp = view.getUint8(24);
-
-                // Print directly to dashboard elements
-                document.getElementById('volt').innerText = voltage.toFixed(2);
-                document.getElementById('amp').innerText = current.toFixed(2);
-                document.getElementById('watt').innerText = (voltage * current).toFixed(2);
-                document.getElementById('ah').innerText = (mah / 1000).toFixed(3); // Convert mAh to Ah format
-                document.getElementById('wh').innerText = wh.toFixed(2);
-                document.getElementById('temp').innerText = temp;
+                // Track down the signature header location index (0xFF 0x55)
+                if (byteQueue[0] === 0xff && byteQueue[1] === 0x55) {
+                    
+                    // Extract exactly 36 bytes for this frame chunk
+                    const packetBytes = byteQueue.slice(0, 36);
+                    // Clear the processed chunk out of our main queue memory
+                    byteQueue = byteQueue.slice(36);
+                    
+                    parseAtorchPacket(packetBytes);
+                } else {
+                    // Drop garbage bytes until the queue matches up to an 0xFF header alignment entry
+                    byteQueue.shift();
+                }
             }
         }
 
-        // Writes raw hex array streams out to the hardware
+        function parseAtorchPacket(bytes) {
+            packetCount++;
+            packetIndicator.innerText = `Live Stream Active. Packets: ${packetCount}`;
+
+            // Parse out values via bitwise shifting of byte layouts matching the device definition specs
+            const voltage = (bytes[4] << 16 | bytes[5] << 8 | bytes[6]) / 100;
+            const current = (bytes[7] << 16 | bytes[8] << 8 | bytes[9]) / 100;
+            
+            const mah = (bytes[10] << 16 | bytes[11] << 8 | bytes[12]);
+            const wh = (bytes[13] << 24 | bytes[14] << 16 | bytes[15] << 8 | bytes[16]) / 100;
+            
+            const temp = bytes[24];
+
+            // Direct DOM hooks to update numbers on screen instantly
+            document.getElementById('volt').innerText = voltage.toFixed(2);
+            document.getElementById('amp').innerText = current.toFixed(2);
+            document.getElementById('watt').innerText = (voltage * current).toFixed(2);
+            document.getElementById('ah').innerText = (mah / 1000).toFixed(3);
+            document.getElementById('wh').innerText = wh.toFixed(2);
+            document.getElementById('temp').innerText = temp;
+        }
+
         async function sendHexCommand(hexArray) {
             if (!atorchCharacteristic) return;
             try {
                 const buffer = new Uint8Array(hexArray);
-                // Supports modules requiring relaxed write validations
                 if (atorchCharacteristic.properties.writeWithoutResponse) {
                     await atorchCharacteristic.writeValueWithoutResponse(buffer);
                 } else {
@@ -162,7 +185,6 @@
             }
         }
 
-        // Standard Atorch binary command arrays (Header 0xB1 0xB2 + Option Data Payload + Checksum)
         onBtn.addEventListener('click', () => {
             sendHexCommand([0xb1, 0xb2, 0x01, 0x01, 0x00, 0x00, 0x00, 0x34]);
         });
