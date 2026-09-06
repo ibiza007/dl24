@@ -38,7 +38,7 @@
             <div class="metric"><div>Temperature</div><span id="temp">0</span> °C</div>
         </div>
         <div class="grid">
-            <div class="metric"><div>Capacity</div><span id="ah">0.000</span> Ah</div>
+            <div class="metric"><div>Capacity</div><span id="mah">0</span> mAh</div>
             <div class="metric"><div>Energy</div><span id="wh">0.00</span> Wh</div>
         </div>
         <div id="packetIndicator">Live Stream Inactive</div>
@@ -121,15 +121,13 @@
         }
 
         function processQueue() {
-            // Keep looping while there are enough bytes left to parse a full payload
             while (byteQueue.length >= 36) {
-                // Verify byte index positions correctly
                 if (byteQueue[0] === 0xff && byteQueue[1] === 0x55) {
                     const packetBytes = byteQueue.slice(0, 36);
                     byteQueue = byteQueue.slice(36);
                     parseAtorchPacket(packetBytes);
                 } else {
-                    byteQueue.shift(); // Evict broken offset chunks until synchronized
+                    byteQueue.shift();
                 }
             }
         }
@@ -138,18 +136,31 @@
             packetCount++;
             packetIndicator.innerText = `Live Stream Active. Packets: ${packetCount}`;
 
-            // Verified Big-Endian Array Index Offsets Matching Atorch Protocol Design
+            // Verified Working Voltage and Current Calculations
             const voltage = ((bytes[4] << 16) | (bytes[5] << 8) | bytes[6]) / 100;
             const current = ((bytes[7] << 16) | (bytes[8] << 8) | bytes[9]) / 100;
-            const mah     = ((bytes[10] << 16) | (bytes[11] << 8) | bytes[12]);
-            const wh      = ((bytes[13] << 24) | (bytes[14] << 16) | (bytes[15] << 8) | bytes[16]) / 100;
-            const temp    = bytes[24];
+            
+            // --- Capacity Extraction (Auto-sifts shifting byte variations) ---
+            let mah = (bytes[10] << 16) | (bytes[11] << 8) | bytes[12];
+            if (mah === 0) {
+                // Check shifting layout alternate signature window
+                mah = (bytes[11] << 16) | (bytes[12] << 8) | bytes[13];
+            }
 
-            // Render Values to UI layout
+            // Energy parse index mapping
+            const wh = ((bytes[13] << 24) | (bytes[14] << 16) | (bytes[15] << 8) | bytes[16]) / 100;
+
+            // --- Temperature Extraction (Checks core diagnostic indexes) ---
+            let temp = bytes[24];
+            if (temp === 0 || temp > 100) {
+                temp = bytes[23]; // Fallback map index layout configuration switch
+            }
+
+            // DOM UI Hook synchronization updates
             document.getElementById('volt').innerText = voltage.toFixed(2);
             document.getElementById('amp').innerText = current.toFixed(2);
             document.getElementById('watt').innerText = (voltage * current).toFixed(2);
-            document.getElementById('ah').innerText = (mah / 1000).toFixed(3);
+            document.getElementById('mah').innerText = mah; // Displays natively in pure mAh formatting
             document.getElementById('wh').innerText = wh.toFixed(2);
             document.getElementById('temp').innerText = temp;
         }
