@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Atorch DL24P Wireless Dashboard</title>
+    <title>Atorch DL24P Wireless Text Dashboard</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #121212; color: #e0e0e0; max-width: 600px; margin: 40px auto; padding: 20px; }
         .card { background: #1e1e1e; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); margin-bottom: 20px; }
@@ -18,12 +18,12 @@
         .btn-toggle:hover { background: #fdd835; }
         .btn-reset { background: #757575; color: #fff; }
         .btn-reset:hover { background: #616161; }
-        #status { font-weight: bold; color: #ffeb3b; text-align: center; margin-bottom: 15px; }
+        #status { font-weight: bold; color: #ffeb3b; text-align: center; margin-bottom: 15px; word-wrap: break-word; }
     </style>
 </head>
 <body>
 
-    <h2>Atorch DL24P Wireless Dashboard</h2>
+    <h2>DL24P Bluetooth Dashboard</h2>
     <div id="status">Status: Disconnected</div>
 
     <button class="btn-connect" id="connectBtn">📶 Connect DL24P Bluetooth</button>
@@ -51,9 +51,13 @@
     </div>
 
     <script>
-        // Custom Serial-Over-BLE Profile UUIDs utilized by Atorch components
-        const BT_SERIAL_SERVICE = '0000ffe0-0000-1000-8000-00805f9b34fb';
-        const BT_SERIAL_CHAR    = '0000ffe1-0000-1000-8000-00805f9b34fb';
+        // List of all popular wireless-to-serial module UUID definitions used by Atorch modules
+        const KNOWN_SERIAL_SERVICES = [
+            '0000ffe0-0000-1000-8000-00805f9b34fb', // Most common text serial BLE profile (ffe0)
+            '0000ff00-0000-1000-8000-00805f9b34fb', // Standard older firmware base
+            '0000fff0-0000-1000-8000-00805f9b34fb', // Alternative generic profile
+            '00007777-0000-1000-8000-00805f9b34fb'  // Custom JDY bridge modules
+        ];
 
         let bleDevice = null;
         let serialCharacteristic = null;
@@ -68,8 +72,9 @@
 
         connectBtn.addEventListener('click', async () => {
             try {
-                statusDiv.innerText = "Status: Scanning for Bluetooth Load...";
+                statusDiv.innerText = "Status: Scanning for your DL24P...";
                 
+                // Instead of filtering down narrow service pathways, scan name prefixes
                 bleDevice = await navigator.bluetooth.requestDevice({
                     filters: [
                         { namePrefix: 'DL24' },
@@ -77,30 +82,61 @@
                         { namePrefix: 'JDY' },
                         { namePrefix: 'ATorch' }
                     ],
-                    optionalServices: [BT_SERIAL_SERVICE]
+                    // Pre-approve all known services so browser permissions let us read them
+                    optionalServices: KNOWN_SERIAL_SERVICES
                 });
 
-                statusDiv.innerText = "Status: Linking to Wireless Profile...";
+                statusDiv.innerText = "Status: Linking to device GATT server...";
                 const server = await bleDevice.gatt.connect();
 
-                statusDiv.innerText = "Status: Accessing Serial Channel...";
-                const service = await server.getPrimaryService(BT_SERIAL_SERVICE);
-                serialCharacteristic = await service.getCharacteristic(BT_SERIAL_CHAR);
+                statusDiv.innerText = "Status: Querying available hardware services...";
+                
+                // Get all profiles running on the hardware chip dynamically
+                const services = await server.getPrimaryServices();
+                let chosenService = null;
 
-                // Listen for returning incoming texts from DL24P
+                // Match the device's true running service profile
+                for (let service of services) {
+                    if (KNOWN_SERIAL_SERVICES.includes(service.uuid.toLowerCase())) {
+                        chosenService = service;
+                        break;
+                    }
+                }
+
+                if (!chosenService) {
+                    // Fallback to checking the very first custom service discovered if no list matches
+                    chosenService = services.find(s => !s.uuid.startsWith('000018'));
+                }
+
+                if (!chosenService) {
+                    throw new Error("Could not map a generic data channel profile on this device.");
+                }
+
+                statusDiv.innerText = `Status: Found service profile (${chosenService.uuid.substring(4,8)}). Fetching data paths...`;
+                
+                // Get characteristics for reading and writing data lines
+                const characteristics = await chosenService.getCharacteristics();
+                
+                // Automatically grab the first notify/write configuration capability channel
+                serialCharacteristic = characteristics.find(c => c.properties.notify || c.properties.write);
+
+                if (!serialCharacteristic) {
+                    throw new Error("No open text communication paths discovered.");
+                }
+
+                // Initialize over the air notification tracking
                 await serialCharacteristic.startNotifications();
                 serialCharacteristic.addEventListener('characteristicvaluechanged', handleIncomingText);
 
-                statusDiv.innerText = `Status: Connected Wirelessly to ${bleDevice.name}!`;
+                statusDiv.innerText = `Status: Connected to ${bleDevice.name}! (Channel: ${chosenService.uuid.substring(4,8)})`;
                 statusDiv.style.color = "#00e676";
                 
-                // Active options UI elements
                 toggleBtn.disabled = false;
                 resetWhBtn.disabled = false;
                 resetAhBtn.disabled = false;
                 connectBtn.disabled = true;
 
-                // Query data interval loop (matches readingDelay: 5 configuration)
+                // Request data strings according to the configuration delay values
                 pollInterval = setInterval(async () => {
                     await sendTextCommand("values?\n");
                 }, 5000);
@@ -112,7 +148,6 @@
             }
         });
 
-        // Processes continuous incoming chunks over the air
         function handleIncomingText(event) {
             const dataView = event.target.value;
             const decoder = new TextDecoder('utf-8');
@@ -120,10 +155,9 @@
             
             incomingTextBuffer += chunk;
 
-            // Break up full transmission packets delimited by newlines
             if (incomingTextBuffer.includes('\n') || incomingTextBuffer.includes('\r')) {
                 const lines = incomingTextBuffer.split(/[\r\n]+/);
-                incomingTextBuffer = lines.pop(); // Hold onto partial segments
+                incomingTextBuffer = lines.pop();
 
                 for (let line of lines) {
                     if (line.trim().length > 0) {
@@ -133,12 +167,9 @@
             }
         }
 
-        // Translates space-separated text fields matching your configuration rules
         function parseTextTelemetry(dataString) {
-            // Converts response strings (e.g., "12.4 1.503 18.6 0.450 5.620") into float formats
             const values = dataString.split(/\s+/).map(Number);
             
-            // Layout Verification mapping: Voltage, Current, Power, Capacity, Energy
             if (values.length >= 5 && !values.some(isNaN)) {
                 document.getElementById('volt').innerText = values[0].toFixed(1);
                 document.getElementById('amp').innerText  = values[1].toFixed(3);
@@ -148,7 +179,6 @@
             }
         }
 
-        // Convey text scripts string over Bluetooth
         async function sendTextCommand(textString) {
             if (!serialCharacteristic) return;
             try {
@@ -156,17 +186,16 @@
                 const buffer = encoder.encode(textString);
                 await serialCharacteristic.writeValue(buffer);
             } catch (error) {
-                console.error("Transmission error:", error);
+                console.error("Wireless transmission dropped:", error);
             }
         }
 
-        // Action bindings directly mirrored from your setup instructions
         toggleBtn.addEventListener('click', async () => {
-            await sendTextCommand("tx 0x32\n"); // On/Off control line item
+            await sendTextCommand("tx 0x32\n");
         });
 
         resetWhBtn.addEventListener('click', async () => {
-            await sendTextCommand("tx 1\n");    // Reset accumulation counters
+            await sendTextCommand("tx 1\n");
         });
 
         resetAhBtn.addEventListener('click', async () => {
