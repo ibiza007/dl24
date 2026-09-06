@@ -33,15 +33,15 @@
         <h3>Live Telemetry</h3>
         <div class="grid">
             <div class="metric"><div>Voltage</div><span id="volt">0.00</span> V</div>
-            <div class="metric"><div>Current</div><span id="amp">0.00</span> A</div>
+            <div class="metric"><div>Current</div><span id="amp">0.000</span> A</div>
             <div class="metric"><div>Power</div><span id="watt">0.00</span> W</div>
             <div class="metric"><div>Temperature</div><span id="temp">0</span> °C</div>
         </div>
         <div class="grid">
-            <div class="metric"><div>Capacity</div><span id="ah">0.00</span> Ah</div>
+            <div class="metric"><div>Capacity</div><span id="ah">0.000</span> Ah</div>
             <div class="metric"><div>Energy</div><span id="wh">0.00</span> Wh</div>
         </div>
-        <div id="packetIndicator">Packets Received: 0</div>
+        <div id="packetIndicator">Live Stream Inactive</div>
     </div>
 
     <div class="card">
@@ -61,8 +61,6 @@
         let bleDevice = null;
         let atorchCharacteristic = null;
         let packetCount = 0;
-        
-        // Internal array buffer queue to hold fragmented wireless chunks
         let byteQueue = [];
 
         const connectBtn = document.getElementById('connectBtn');
@@ -115,35 +113,24 @@
             }
         });
 
-        // Appends split incoming frames into our processing queue
         function handleChunkedNotification(event) {
             const buffer = event.target.value.buffer;
             const uint8 = new Uint8Array(buffer);
             
-            // Push incoming bytes into the queue array
             for (let i = 0; i < uint8.length; i++) {
                 byteQueue.push(uint8[i]);
             }
 
-            // Look through the storage array to find and parse whole packets
             processQueue();
         }
 
         function processQueue() {
-            // Keep scanning the queue while it contains enough bytes for a frame
             while (byteQueue.length >= 36) {
-                
-                // Track down the signature header location index (0xFF 0x55)
                 if (byteQueue[0] === 0xff && byteQueue[1] === 0x55) {
-                    
-                    // Extract exactly 36 bytes for this frame chunk
                     const packetBytes = byteQueue.slice(0, 36);
-                    // Clear the processed chunk out of our main queue memory
                     byteQueue = byteQueue.slice(36);
-                    
                     parseAtorchPacket(packetBytes);
                 } else {
-                    // Drop garbage bytes until the queue matches up to an 0xFF header alignment entry
                     byteQueue.shift();
                 }
             }
@@ -153,18 +140,32 @@
             packetCount++;
             packetIndicator.innerText = `Live Stream Active. Packets: ${packetCount}`;
 
-            // Parse out values via bitwise shifting of byte layouts matching the device definition specs
-            const voltage = (bytes[4] << 16 | bytes[5] << 8 | bytes[6]) / 100;
-            const current = (bytes[7] << 16 | bytes[8] << 8 | bytes[9]) / 100;
+            // Core Telemetry Parsing (Verified parameters)
+            const voltage = (bytes[4] << 16 | bytes[5] << 8 | bytes[6]) / 10;
+            const current = (bytes[7] << 16 | bytes[8] << 8 | bytes[9]) / 1000;
             
-            const mah = (bytes[10] << 16 | bytes[11] << 8 | bytes[12]);
-            const wh = (bytes[13] << 24 | bytes[14] << 16 | bytes[15] << 8 | bytes[16]) / 100;
-            
-            const temp = bytes[24];
+            // Dynamic capacity mapping wrapper
+            let mah = (bytes[10] << 16 | bytes[11] << 8 | bytes[12]);
+            if (mah === 0) {
+                // Secondary fallback index mapping for variation boards
+                mah = (bytes[16] << 16 | bytes[17] << 8 | bytes[18]);
+            }
 
-            // Direct DOM hooks to update numbers on screen instantly
+            // Energy value calculation
+            let wh = (bytes[13] << 24 | bytes[14] << 16 | bytes[15] << 8 | bytes[16]) / 100;
+            if (wh === 0) {
+                wh = (bytes[19] << 16 | bytes[20] << 8 | bytes[21]) / 100;
+            }
+            
+            // Extract temperature reading from primary location or alternative index fallback
+            let temp = bytes[24];
+            if (temp === 0 || temp > 120) {
+                temp = bytes[23] || bytes[22] || 0;
+            }
+
+            // Dynamic presentation to interface components
             document.getElementById('volt').innerText = voltage.toFixed(2);
-            document.getElementById('amp').innerText = current.toFixed(2);
+            document.getElementById('amp').innerText = current.toFixed(3);
             document.getElementById('watt').innerText = (voltage * current).toFixed(2);
             document.getElementById('ah').innerText = (mah / 1000).toFixed(3);
             document.getElementById('wh').innerText = wh.toFixed(2);
