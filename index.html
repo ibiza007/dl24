@@ -93,7 +93,6 @@
         const tableHeaders = document.getElementById('tableHeaders');
         const tableValues = document.getElementById('tableValues');
 
-        // Build the 36 layout columns cleanly
         for (let i = 0; i < 36; i++) {
             const th = document.createElement('th');
             th.innerText = `[${i}]`;
@@ -154,7 +153,6 @@
         }
 
         function processQueue() {
-            // FIXED: Explicitly verify indices using exact array index notation
             while (byteQueue.length >= 36) {
                 if (byteQueue[0] === 0xff && byteQueue[1] === 0x55) {
                     const packetBytes = byteQueue.slice(0, 36);
@@ -170,23 +168,20 @@
             packetCount++;
             packetIndicator.innerText = `Packets Processed: ${packetCount}`;
 
-            // Render live numeric fields cleanly to the logging table
             for (let i = 0; i < 36; i++) {
                 document.getElementById(`rawByte-${i}`).innerText = rawBufferArray[i];
             }
 
-            // FIXED: Swapped out signed bit-shifting for explicit multiplication math to stop bit truncation errors
+            // Fixed math multiplication to stop JavaScript bit overflow drops
             const voltage = ((rawBufferArray[4] * 65536) + (rawBufferArray[5] * 256) + rawBufferArray[6]) / 100.0;
             const current = ((rawBufferArray[7] * 65536) + (rawBufferArray[8] * 256) + rawBufferArray[9]) / 100.0;
             
-            // Capacity extraction: Convert standard Amp-hours representation into pure mAh units
+            // Convert pure Amp-hours array maps cleanly to target mAh representation
             const capacityAh = ((rawBufferArray[10] * 65536) + (rawBufferArray[11] * 256) + rawBufferArray[12]) / 100.0;
             const capacityMiah = Math.round(capacityAh * 1000);
 
-            // Read temperature byte directly without arithmetic operations
             const temp = rawBufferArray[24];
 
-            // Render out updates to UI boxes instantly
             document.getElementById('volt').innerText = voltage.toFixed(2);
             document.getElementById('amp').innerText = current.toFixed(2);
             document.getElementById('watt').innerText = (voltage * current).toFixed(2);
@@ -204,4 +199,17 @@
                     await atorchCharacteristic.writeValue(buffer);
                 }
             } catch (error) {
-console.error("Transmission breakdown:", error);}}onBtn.addEventListener('click', () => {sendHexCommand([0xb1, 0xb2, 0x01, 0x01, 0x00, 0x00, 0x00, 0x34]);});offBtn.addEventListener('click', () => {sendHexCommand([0xb1, 0xb2, 0x01, 0x00, 0x00, 0x00, 0x00, 0x33]);});
+                console.error("Transmission breakdown:", error);
+            }
+        }
+
+        onBtn.addEventListener('click', () => {
+            sendHexCommand([0xb1, 0xb2, 0x01, 0x01, 0x00, 0x00, 0x00, 0x34]);
+        });
+
+        offBtn.addEventListener('click', () => {
+            sendHexCommand([0xb1, 0xb2, 0x01, 0x00, 0x00, 0x00, 0x00, 0x33]);
+        });
+    </script>
+</body>
+</html>
