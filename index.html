@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Atorch DL24P Diagnostics & Dashboard</title>
+    <title>Atorch DL24P Troubleshooting Console</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #121212; color: #e0e0e0; max-width: 750px; margin: 30px auto; padding: 20px; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #121212; color: #e0e0e0; max-width: 800px; margin: 20px auto; padding: 20px; }
         .card { background: #1e1e1e; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); margin-bottom: 20px; }
         .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 15px; }
         .metric { background: #2a2a2a; padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #333; }
@@ -19,65 +19,59 @@
         .btn-off { background: #ff1744; color: #fff; }
         .btn-off:hover { background: #d50000; }
         #status { font-weight: bold; color: #ffeb3b; text-align: center; margin-bottom: 15px; font-size: 1.1rem; }
-        #packetIndicator { text-align: center; font-size: 0.85rem; color: #888; font-family: monospace; margin-top: 5px; }
         
-        /* Analyzer Styles */
-        .log-container { background: #000; padding: 15px; border-radius: 8px; border: 1px solid #ff9100; font-family: monospace; margin-top: 10px; }
-        .hex-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 6px; text-align: center; font-size: 0.9rem; margin-top: 10px; color: #ff9100; }
-        .hex-byte { background: #141414; padding: 4px 2px; border-radius: 4px; border: 1px solid #222; position: relative; }
-        .hex-byte::after { content: attr(data-index); position: absolute; bottom: -12px; left: 0; width: 100%; font-size: 0.6rem; color: #555; }
-        .highlight-v { border-color: #00b0ff !important; color: #00b0ff !important; }
-        .highlight-a { border-color: #e040fb !important; color: #e040fb !important; }
-        .highlight-cap { border-color: #00e676 !important; color: #00e676 !important; }
-        .highlight-t { border-color: #ffeb3b !important; color: #ffeb3b !important; }
-        .legend { display: flex; flex-wrap: wrap; gap: 15px; margin-top: 20px; font-size: 0.8rem; justify-content: center; }
-        .legend-item { display: flex; align-items: center; gap: 5px; }
-        .legend-color { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+        /* Raw Log Table Layout */
+        .table-container { background: #000; padding: 15px; border-radius: 8px; border: 1px solid #ff9100; overflow-x: auto; margin-top: 15px; }
+        table { width: 100%; border-collapse: collapse; font-family: monospace; font-size: 0.85rem; text-align: center; }
+        th, td { border: 1px solid #333; padding: 6px; }
+        th { background: #111; color: #ff9100; }
+        .hl-v { background: rgba(0, 176, 255, 0.2); color: #00b0ff; }
+        .hl-a { background: rgba(224, 64, 251, 0.2); color: #e040fb; }
+        .hl-c { background: rgba(0, 230, 118, 0.2); color: #00e676; }
+        .hl-t { background: rgba(255, 235, 59, 0.2); color: #ffeb3b; }
     </style>
 </head>
 <body>
 
-    <h2>Atorch DL24P Wirelessly Analyzer</h2>
+    <h2>DL24P Calibration & Packet Logger</h2>
     <div id="status">Status: Disconnected</div>
 
     <button class="btn-connect" id="connectBtn">📶 Connect DL24P Bluetooth</button>
 
+    <!-- 1. The Real Telemetry Boxes -->
     <div class="card">
-        <h3>Live Measurements Dashboard</h3>
+        <h3>Calculated Values Dashboard</h3>
         <div class="grid">
-            <div class="metric" style="border-left: 4px solid #00b0ff;"><div>Voltage</div><span id="volt">0.00</span> V</div>
-            <div class="metric" style="border-left: 4px solid #e040fb;"><div>Current</div><span id="amp">0.00</span> A</div>
-            <div class="metric"><div>Power</div><span id="watt">0.00</span> W</div>
-            <div class="metric" style="border-left: 4px solid #ffeb3b;"><div>Temperature</div><span id="temp">0</span> °C</div>
+            <div class="metric"><div>Voltage</div><span id="volt">0.00</span> V</div>
+            <div class="metric"><div>Current</div><span id="amp">0.00</span> A</div>
+            <div class="metric"><div>Temperature</div><span id="temp">0</span> °C</div>
+            <div class="metric"><div>Capacity</div><span id="mah">0</span> mAh</div>
         </div>
-        <div class="grid">
-            <div class="metric" style="border-left: 4px solid #00e676; grid-column: span 1;"><div>Capacity</div><span id="mah">0</span> mAh</div>
-            <div class="metric"><div>Energy</div><span id="wh">0.00</span> Wh</div>
+        <div class="grid" style="grid-template-columns: 1fr; margin-top: 15px; text-align: center; color: #888; font-size: 0.9rem;">
+            <div id="packetIndicator">Packets Processed: 0</div>
         </div>
-        <div id="packetIndicator">No stream stream processing active.</div>
     </div>
 
+    <!-- 2. The Raw Decoded Stream Log Table -->
     <div class="card" style="border: 1px solid #ff9100;">
-        <h3>Raw Packet Analyzer (36-Byte Frame Buffer)</h3>
-        <p style="font-size:0.8rem; margin:0; color:#aaa;">Values update live below. Use byte markings to locate parameters:</p>
+        <h3>Live Raw Byte Log Table</h3>
+        <p style="font-size: 0.8rem; color: #aaa; margin: 0 0 10px 0;">This grid displays raw base-10 numerical data arrays streaming right out of your hardware chip memory slots:</p>
         
-        <div class="log-container">
-            <div style="color: #666; font-size: 0.8rem; margin-bottom: 5px;">BYTE MATRIX LAYOUT [INDEX 0-35]</div>
-            <div class="hex-grid" id="hexContainer">
-                <!-- 36 items will be generated here -->
-            </div>
-            
-            <div class="legend">
-                <div class="legend-item"><span class="legend-color" style="background:#00b0ff;"></span> Volt [Bytes 4..6]</div>
-                <div class="legend-item"><span class="legend-color" style="background:#e040fb;"></span> Amp [Bytes 7..9]</div>
-                <div class="legend-item"><span class="legend-color" style="background:#00e676;"></span> Capacity [Bytes 10..12]</div>
-                <div class="legend-item"><span class="legend-color" style="background:#ffeb3b;"></span> Temp [Byte 24]</div>
-            </div>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr id="tableHeaders"></tr>
+                </thead>
+                <tbody>
+                    <tr id="tableValues"></tr>
+                </tbody>
+            </table>
         </div>
     </div>
 
+    <!-- 3. Load Operations Panel -->
     <div class="card">
-        <h3>Load Controls</h3>
+        <h3>Hardware Controls</h3>
         <div class="grid">
             <button class="btn-on" id="onBtn" disabled>▶ Start Load (ON)</button>
             <button class="btn-off" id="offBtn" disabled>⏹ Stop Load (OFF)</button>
@@ -95,57 +89,52 @@
         let packetCount = 0;
         let byteQueue = [];
 
-        // DOM Handles
+        // DOM Element Definitions
         const connectBtn = document.getElementById('connectBtn');
         const onBtn = document.getElementById('onBtn');
         const offBtn = document.getElementById('offBtn');
         const statusDiv = document.getElementById('status');
         const packetIndicator = document.getElementById('packetIndicator');
-        const hexContainer = document.getElementById('hexContainer');
+        const tableHeaders = document.getElementById('tableHeaders');
+        const tableValues = document.getElementById('tableValues');
 
-        // Pre-build the 36 visualization grid items
+        // Pre-build 36 log table rows
         for (let i = 0; i < 36; i++) {
-            const div = document.createElement('div');
-            div.className = 'hex-byte';
-            div.id = `byte-${i}`;
-            div.setAttribute('data-index', i);
-            div.innerText = '00';
+            const th = document.createElement('th');
+            th.innerText = `[${i}]`;
             
-            // Apply protocol-specific highlighting boundaries
-            if (i >= 4 && i <= 6) div.classList.add('highlight-v');
-            if (i >= 7 && i <= 9) div.classList.add('highlight-a');
-            if (i >= 10 && i <= 12) div.classList.add('highlight-cap');
-            if (i === 24) div.classList.add('highlight-t');
+            // Apply targeted styling highlights matching syssi mappings
+            if (i >= 4 && i <= 6) th.className = 'hl-v';
+            if (i >= 7 && i <= 9) th.className = 'hl-a';
+            if (i >= 10 && i <= 12) th.className = 'hl-c';
+            if (i === 24) th.className = 'hl-t';
             
-            hexContainer.appendChild(div);
+            tableHeaders.appendChild(th);
+
+            const td = document.createElement('td');
+            td.id = `rawByte-${i}`;
+            td.innerText = '-';
+            tableValues.appendChild(td);
         }
 
         connectBtn.addEventListener('click', async () => {
             try {
-                statusDiv.innerText = "Status: Scanning for DL24_BLE...";
-                
+                statusDiv.innerText = "Status: Scanning...";
                 bleDevice = await navigator.bluetooth.requestDevice({
-                    filters: [
-                        { namePrefix: 'DL24' },
-                        { namePrefix: 'E-test' },
-                        { namePrefix: 'ATorch' }
-                    ],
+                    filters: [{ namePrefix: 'DL24' }, { namePrefix: 'E-test' }, { namePrefix: 'ATorch' }],
                     optionalServices: ATORCH_SERVICES
                 });
 
-                statusDiv.innerText = "Status: Connecting to GATT Server...";
                 const server = await bleDevice.gatt.connect();
-
-                statusDiv.innerText = "Status: Discovering services...";
                 const services = await server.getPrimaryServices();
                 let chosenService = services.find(s => ATORCH_SERVICES.includes(s.uuid.toLowerCase())) || services.find(s => !s.uuid.startsWith('000018'));
 
-                if (!chosenService) throw new Error("Could not map Atorch data service profile.");
+                if (!chosenService) throw new Error("Atorch profile service not exposed.");
 
                 const characteristics = await chosenService.getCharacteristics();
                 atorchCharacteristic = characteristics.find(c => c.properties.notify || c.properties.write || c.properties.writeWithoutResponse);
 
-                if (!atorchCharacteristic) throw new Error("Telemetry channel unavailable.");
+                if (!atorchCharacteristic) throw new Error("Data channel unavailable.");
 
                 await atorchCharacteristic.startNotifications();
                 atorchCharacteristic.addEventListener('characteristicvaluechanged', handleChunkedNotification);
@@ -166,7 +155,6 @@
         function handleChunkedNotification(event) {
             const buffer = event.target.value.buffer;
             const uint8 = new Uint8Array(buffer);
-            
             for (let i = 0; i < uint8.length; i++) {
                 byteQueue.push(uint8[i]);
             }
@@ -175,18 +163,49 @@
 
         function processQueue() {
             while (byteQueue.length >= 36) {
-                // Find matching Atorch header window boundary markers (0xFF 0x55)
+                // Ensure header parsing boundaries match signature blocks correctly
                 if (byteQueue[0] === 0xff && byteQueue[1] === 0x55) {
                     const packetBytes = byteQueue.slice(0, 36);
                     byteQueue = byteQueue.slice(36);
                     parseAtorchPacket(packetBytes);
                 } else {
-                    byteQueue.shift(); // Sift down queue until aligned
+                    byteQueue.shift();
                 }
             }
         }
 
-        function parseAtorchPacket(bytes) {
+        // FIXED ARRAY VARIABLE SPLICER METHOD
+        function parseAtorchPacket(rawBufferArray) {
             packetCount++;
-            packetIndicator.innerText = `Live Stream Processing Active. Packets: ${packetCount}`;
+            packetIndicator.innerText = `Packets Processed: ${packetCount}`;
 
+            // Write raw decimal integer stream right onto logging table columns
+            for (let i = 0; i < 36; i++) {
+                const cell = document.getElementById(`rawByte-${i}`);
+                cell.innerText = rawBufferArray[i];
+                
+                // Color match highlights
+                if (i >= 4 && i <= 6) cell.className = 'hl-v';
+                if (i >= 7 && i <= 9) cell.className = 'hl-a';
+                if (i >= 10 && i <= 12) cell.className = 'hl-c';
+                if (i === 24) cell.className = 'hl-t';
+            }
+
+            // 1. Voltage Conversion (Slots 4, 5, 6)
+            const voltInt = (rawBufferArray[4] << 16) | (rawBufferArray[5] << 8) | rawBufferArray[6];
+            const voltage = voltInt / 100.0;
+
+            // 2. Current Conversion (Slots 7, 8, 9)
+            const currentInt = (rawBufferArray[7] << 16) | (rawBufferArray[8] << 8) | rawBufferArray[9];
+            const current = currentInt / 100.0;
+
+            // 3. Native Capacity Calculation mapped directly to pure mAh integers
+            const capacityAh = ((rawBufferArray[10] << 16) | (rawBufferArray[11] << 8) | rawBufferArray[12]) / 100.0;
+            const capacityMiah = Math.round(capacityAh * 1000);
+
+            // 4. Temperature Conversion (Slot 24)
+            const temp = rawBufferArray[24];
+
+            // Render calculations out onto view parameters containers
+            document.getElementById('volt').innerText = voltage.toFixed(2);
+            document.getElementById('amp').innerText = current.toFixed(2);
