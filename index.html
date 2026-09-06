@@ -1,175 +1,228 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Atorch DL24P Bluetooth Monitor</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #121212; color: #e0e0e0; max-width: 600px; margin: 30px auto; padding: 20px; }
-        .card { background: #1e1e1e; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); margin-bottom: 20px; }
-        .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 15px; }
-        .metric { background: #2a2a2a; padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #333; }
-        .metric div { font-size: 0.9rem; color: #aaa; margin-bottom: 5px; }
-        .metric span { font-size: 2rem; font-weight: bold; color: #00e676; }
-        button { width: 100%; padding: 14px; font-size: 1rem; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; transition: background 0.2s; margin-bottom: 10px; }
-        .btn-connect { background: #00b0ff; color: #fff; }
-        .btn-connect:hover { background: #0091ea; }
-        #status { font-weight: bold; color: #ffeb3b; text-align: center; margin-bottom: 15px; font-size: 1.1rem; }
-        .raw-text-box { background: #000; color: #ff9100; font-family: 'Courier New', Courier, monospace; padding: 15px; border-radius: 8px; border: 1px solid #ff9100; font-size: 0.95rem; line-height: 1.6; white-space: pre-wrap; word-break: break-all; }
-    </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ATORCH DL24 BLE Raw Capture</title>
+<style>
+  body{font-family:system-ui,Arial,sans-serif;max-width:1100px;margin:24px auto;padding:0 16px;background:#f5f5f5;color:#222}
+  h1{margin-bottom:4px}.muted{color:#666}
+  button{padding:9px 14px;margin:4px;border:1px solid #aaa;border-radius:6px;background:white;cursor:pointer}
+  button.primary{background:#222;color:#fff}.danger{background:#fee}.card{background:#fff;border:1px solid #ddd;border-radius:10px;padding:16px;margin:14px 0}
+  #status{font-weight:600}.ok{color:green}.err{color:#b00020}
+  table{width:100%;border-collapse:collapse;font-size:14px}th,td{border-bottom:1px solid #ddd;padding:7px;text-align:left;vertical-align:top}
+  code,pre{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}.raw{white-space:pre-wrap;word-break:break-all}
+  #log{height:260px;overflow:auto;background:#111;color:#ddd;padding:10px;border-radius:6px}
+  .small{font-size:12px}
+  input{padding:8px;width:180px}
+</style>
 </head>
 <body>
+<h1>ATORCH DL24 BLE Raw Capture</h1>
+<div class="muted">Web Bluetooth packet inspector — captures notifications without interpreting the bytes.</div>
 
-    <h2>Atorch DL24P Bluetooth Monitor</h2>
-    <div id="status">Status: Disconnected</div>
+<div class="card">
+  <button class="primary" id="connect">Connect to DL24</button>
+  <button id="disconnect" disabled>Disconnect</button>
+  <button id="clear">Clear capture</button>
+  <button id="download">Download CSV</button>
+  <span id="status">Disconnected</span>
+  <p class="small">Use Chrome/Edge on a computer with Bluetooth enabled. The page must be served from HTTPS or localhost.</p>
+</div>
 
-    <button class="btn-connect" id="connectBtn">📶 Connect DL24P Bluetooth</button>
+<div class="card">
+<h2>Characteristics</h2>
+<table>
+<thead><tr><th>Service</th><th>Characteristic</th><th>Properties</th><th>Action</th></tr></thead>
+<tbody id="chars"></tbody>
+</table>
+</div>
 
-    <div class="card">
-        <h3>Calculated Values</h3>
-        <div class="grid">
-            <div class="metric"><div>Voltage</div><span id="volt">0.000</span> V</div>
-            <div class="metric"><div>Current</div><span id="amp">0.000</span> A</div>
-            <div class="metric"><div>Temperature</div><span id="temp">0.0</span> °C</div>
-            <div class="metric"><div>Capacity</div><span id="mah">0</span> mAh</div>
-        </div>
-        <div style="text-align: center; margin-top: 15px; color: #888; font-size: 0.85rem;" id="packetIndicator">
-            Packets Processed: 0
-        </div>
-    </div>
+<div class="card">
+<h2>Captured notifications: <span id="count">0</span></h2>
+<table>
+<thead><tr><th>#</th><th>Time</th><th>Length</th><th>Hex</th></tr></thead>
+<tbody id="packets"></tbody>
+</table>
+</div>
 
-    <div class="card" style="border: 1px solid #ff9100;">
-        <div style="color: #ff9100; font-weight: bold; margin-bottom: 10px;">Live Raw Data Array [0-35]:</div>
-        <div class="raw-text-box" id="rawLogBox">Awaiting data stream... Click connect above.</div>
-    </div>
+<div class="card">
+<h2>Log</h2>
+<pre id="log"></pre>
+</div>
 
-    <script>
-        const ATORCH_SERVICES = [
-            '0000ffe0-0000-1000-8000-00805f9b34fb',
-            '0000ff00-0000-1000-8000-00805f9b34fb'
-        ];
+<script>
+let device=null;
+let characteristics=[];
+let captures=[];
+let packetNo=0;
 
-        let bleDevice = null;
-        let atorchCharacteristic = null;
-        let packetCount = 0;
-        let byteQueue = [];
+const $ = id => document.getElementById(id);
 
-        const connectBtn = document.getElementById('connectBtn');
-        const statusDiv = document.getElementById('status');
-        const packetIndicator = document.getElementById('packetIndicator');
-        const rawLogBox = document.getElementById('rawLogBox');
+function log(s, cls=""){
+  const line=document.createElement("div");
+  line.textContent=s;
+  if(cls) line.className=cls;
+  $("log").appendChild(line);
+  $("log").scrollTop=$("log").scrollHeight;
+}
 
-        connectBtn.addEventListener('click', async () => {
-            try {
-                statusDiv.innerText = "Status: Scanning...";
-                
-                bleDevice = await navigator.bluetooth.requestDevice({
-                    filters: [{ namePrefix: 'DL24' }, { namePrefix: 'E-test' }, { namePrefix: 'ATorch' }],
-                    optionalServices: ATORCH_SERVICES
-                });
+function hex(data){
+  return [...new Uint8Array(data)].map(x=>x.toString(16).padStart(2,"0")).join(" ");
+}
 
-                statusDiv.innerText = "Status: Connecting...";
-                const server = await bleDevice.gatt.connect();
-                const services = await server.getPrimaryServices();
-                let chosenService = services.find(s => ATORCH_SERVICES.includes(s.uuid.toLowerCase())) || services.find(s => !s.uuid.startsWith('000018'));
+function uuidShort(u){
+  return u.length>20 ? u : u;
+}
 
-                if (!chosenService) throw new Error("Atorch service profile not found.");
+function props(c){
+  const p=[];
+  if(c.properties.read)p.push("read");
+  if(c.properties.write)p.push("write");
+  if(c.properties.writeWithoutResponse)p.push("writeWithoutResponse");
+  if(c.properties.notify)p.push("notify");
+  if(c.properties.indicate)p.push("indicate");
+  return p.join(", ");
+}
 
-                const characteristics = await chosenService.getCharacteristics();
-                atorchCharacteristic = characteristics.find(c => c.properties.notify || c.properties.write || c.properties.writeWithoutResponse);
+function addPacket(data){
+  const h=hex(data);
+  const now=new Date().toISOString();
+  captures.push({n:++packetNo,time:now,length:data.byteLength,hex:h});
+  $("count").textContent=captures.length;
 
-                if (!atorchCharacteristic) throw new Error("Data channel unavailable.");
+  const tr=document.createElement("tr");
+  tr.innerHTML=`<td>${packetNo}</td><td>${now}</td><td>${data.byteLength}</td><td><code>${h}</code></td>`;
+  $("packets").appendChild(tr);
+}
 
-                await atorchCharacteristic.startNotifications();
-                atorchCharacteristic.addEventListener('characteristicvaluechanged', handleBluetoothData);
+function onNotification(e){
+  const data=e.target.value;
+  addPacket(data.buffer);
+  log(`NOTIFY ${data.byteLength} bytes: ${hex(data.buffer)}`);
+}
 
-                statusDiv.innerText = `Status: Connected to ${bleDevice.name}!`;
-                statusDiv.style.color = "#00e676";
-                connectBtn.disabled = true;
+async function discover(){
+  characteristics=[];
+  $("chars").innerHTML="";
+  const services=await device.gatt.getPrimaryServices();
 
-            } catch (error) {
-                console.error(error);
-                statusDiv.innerText = `Error: ${error.message}`;
-                statusDiv.style.color = "#ff1744";
-            }
-        });
+  for(const service of services){
+    log(`Service: ${service.uuid}`);
+    let cs=[];
+    try{ cs=await service.getCharacteristics(); }
+    catch(e){ log(`Cannot enumerate ${service.uuid}: ${e}`,"err"); continue; }
 
-        function handleBluetoothData(event) {
-            const buffer = event.target.value;
-            const uint8 = new Uint8Array(buffer.buffer);
-            
-            for (let i = 0; i < uint8.length; i++) {
-                byteQueue.push(uint8[i]);
-            }
+    for(const c of cs){
+      characteristics.push(c);
+      const tr=document.createElement("tr");
+      const action=document.createElement("td");
+      if(c.properties.notify || c.properties.indicate){
+        const b=document.createElement("button");
+        b.textContent="Start notifications";
+        b.onclick=async()=>{
+          try{
+            await c.startNotifications();
+            c.addEventListener("characteristicvaluechanged",onNotification);
+            b.textContent="Notifications ON";
+            b.disabled=true;
+            log(`Notifications enabled: ${c.uuid}`,"ok");
+          }catch(e){ log(`Notify failed ${c.uuid}: ${e}`,"err"); }
+        };
+        action.appendChild(b);
+      }else action.textContent="—";
 
-            while (byteQueue.length >= 36) {
-                if (byteQueue[0] === 255 && byteQueue[1] === 85) {
-                    const packetBytes = byteQueue.slice(0, 36);
-                    byteQueue = byteQueue.slice(36);
-                    parseDataPacket(packetBytes);
-                } else {
-                    byteQueue.shift();
-                }
-            }
-        }
+      if(c.properties.read){
+        const b=document.createElement("button");
+        b.textContent="Read once";
+        b.onclick=async()=>{
+          try{
+            const v=await c.readValue();
+            addPacket(v.buffer);
+            log(`READ ${c.uuid}: ${hex(v.buffer)}`);
+          }catch(e){log(`Read failed ${c.uuid}: ${e}`,"err");}
+        };
+        action.appendChild(b);
+      }
 
-        function parseDataPacket(bytes) {
-            packetCount++;
-            packetIndicator.innerText = `Packets Processed: ${packetCount}`;
+      if(c.properties.write || c.properties.writeWithoutResponse){
+        const b=document.createElement("button");
+        b.textContent="Write 01 00";
+        b.onclick=async()=>{
+          try{
+            const x=new Uint8Array([0x01,0x00]);
+            if(c.properties.write) await c.writeValue(x);
+            else await c.writeValueWithoutResponse(x);
+            log(`WRITE 01 00 -> ${c.uuid}`,"ok");
+          }catch(e){log(`Write failed ${c.uuid}: ${e}`,"err");}
+        };
+        action.appendChild(b);
+      }
 
-            // Render raw log string array securely
-            let logString = "";
-            for(let i = 0; i < 36; i++) {
-                logString += `[${String(i).padStart(2, '0')}]: ${String(bytes[i]).padStart(3, ' ')}`;
-                if ((i + 1) % 4 === 0) logString += "\n";
-                else logString += "   |   ";
-            }
-            rawLogBox.innerText = logString;
+      tr.innerHTML=`<td><code>${service.uuid}</code></td><td><code>${c.uuid}</code></td><td>${props(c)}</td>`;
+      tr.appendChild(action);
+      $("chars").appendChild(tr);
+    }
+  }
+}
 
-            // Direct mapping using basic index locations to bypass all math errors
-            let voltage = 0.000;
-            if (bytes[6] === 51) voltage = 5.100;
-            if (bytes[6] === 50) voltage = 5.035;
-            if (bytes[6] === 49) voltage = 4.935;
+$("connect").onclick=async()=>{
+  if(!navigator.bluetooth){
+    $("status").textContent="Web Bluetooth not supported";
+    $("status").className="err";
+    return;
+  }
+  try{
+    $("status").textContent="Selecting device…";
+    // Do not request a fixed service UUID: some DL24 variants expose vendor-specific UUIDs.
+    device=await navigator.bluetooth.requestDevice({
+      filters:[
+        {name:"DL24_BLE"},
+        {namePrefix:"DL24"},
+        {namePrefix:"DL24P"}
+      ],
+      optionalServices:["generic_access","generic_attribute"]
+    });
+    device.addEventListener("gattserverdisconnected",()=>{
+      $("status").textContent="Disconnected";
+      $("disconnect").disabled=true;
+      $("connect").disabled=false;
+      log("Device disconnected");
+    });
+    log(`Selected: ${device.name || "(unnamed)"}`);
+    await device.gatt.connect();
+    $("status").textContent=`Connected: ${device.name || "(unnamed)"}`;
+    $("status").className="ok";
+    $("disconnect").disabled=false;
+    $("connect").disabled=true;
+    await discover();
+  }catch(e){
+    $("status").textContent="Connection cancelled/failed";
+    $("status").className="err";
+    log(String(e),"err");
+  }
+};
 
-            // Current parsing (combines bytes 8 and 9 properly)
-            let current = ((bytes[8] * 256) + bytes[9]) / 1000.0;
+$("disconnect").onclick=()=>{
+  if(device && device.gatt.connected) device.gatt.disconnect();
+};
 
-            // Temperature parsing (reads byte 25 whole number)
-            let temperature = bytes[25];
-            if (temperature === 31 && bytes[29] === 15) temperature = 31.2;
-            if (temperature === 31 && bytes[29] === 11) temperature = 31.0;
-            if (temperature === 30 && bytes[29] === 40) temperature = 30.9;
+$("clear").onclick=()=>{
+  captures=[]; packetNo=0; $("count").textContent="0"; $("packets").innerHTML=""; log("Capture cleared");
+};
 
-            // Capacity parsing (reads byte 12 directly from your logs)
-            let capacityMiah = 0;
-            if (bytes[12] === 0) {
-                if (bytes[29] === 12) capacityMiah = 2;
-                if (bytes[29] === 15 || bytes[29] === 28) capacityMiah = 5;
-            }
-            if (bytes[12] === 1) {
-                if (bytes[29] === 15) capacityMiah = 15;
-                else capacityMiah = 10;
-            }
-            if (bytes[12] === 2) capacityMiah = 30;
-            if (bytes[12] === 3) capacityMiah = 33;
-            if (bytes[12] === 4) {
-                if (bytes[29] === 14) capacityMiah = 46;
-                else if (bytes[29] === 11) capacityMiah = 49;
-                else capacityMiah = 40;
-            }
-            if (bytes[12] === 5) {
-                if (bytes[29] === 18) capacityMiah = 58;
-                else capacityMiah = 51;
-            }
-            if (bytes[12] === 6) capacityMiah = 59;
-
-            // Push strings safely to display elements
-            document.getElementById('volt').innerText = String(voltage.toFixed(3));
-            document.getElementById('amp').innerText = String(current.toFixed(3));
-            document.getElementById('mah').innerText = String(capacityMiah);
-            document.getElementById('temp').innerText = String(temperature.toFixed(1));
-        }
-    </script>
+$("download").onclick=()=>{
+  if(!captures.length){alert("No packets captured.");return;}
+  const rows=[["packet","timestamp","length","hex"]];
+  for(const x of captures) rows.push([x.n,x.time,x.length,x.hex]);
+  const csv=rows.map(r=>r.map(v=>`"${String(v).replaceAll('"','""')}"`).join(",")).join("\n");
+  const blob=new Blob([csv],{type:"text/csv"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="atorch_dl24_raw_capture.csv";
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+</script>
 </body>
 </html>
