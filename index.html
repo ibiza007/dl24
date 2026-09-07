@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Atorch DL24 · BLE</title>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js">
+    </script>
 
     <style>
         * {
@@ -22,7 +23,7 @@
             padding: 1rem;
         }
         .card {
-            max-width: 860px;
+            max-width: 900px;
             width: 100%;
             background: white;
             border-radius: 2rem;
@@ -179,12 +180,11 @@
             font-weight: 400;
         }
 
-        /* Fixed-height chart – stable, no shrinking */
         .chart-container {
             background: #fafcff;
             border-radius: 20px;
             padding: 1rem;
-            margin: 1.8rem 0 1.5rem;
+            margin: 1.8rem 0 1rem;
             border: 1px solid #e7edf8;
         }
         .chart-container canvas {
@@ -199,7 +199,7 @@
             align-items: center;
             justify-content: space-between;
             gap: 0.8rem;
-            margin: -0.5rem 0 1.2rem 0;
+            margin: -0.5rem 0 0.8rem 0;
         }
         .chart-status {
             font-size: 0.8rem;
@@ -223,9 +223,86 @@
             background: #f59e0b;
         }
         @keyframes pulse {
-            0% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.4; transform: scale(0.8); }
-            100% { opacity: 1; transform: scale(1); }
+            0% {
+                opacity: 1;
+                transform: scale(1);
+            }
+            50% {
+                opacity: 0.4;
+                transform: scale(0.8);
+            }
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        .toggle-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.6rem;
+            background: #f1f5f9;
+            padding: 0.5rem 1rem;
+            border-radius: 40px;
+            margin: 0.2rem 0 1.2rem 0;
+        }
+        .toggle-label {
+            font-weight: 600;
+            font-size: 0.8rem;
+            color: #1f2a44;
+            letter-spacing: 0.03em;
+            margin-right: 0.2rem;
+        }
+        .toggle-btn {
+            border: none;
+            padding: 0.35rem 1.2rem;
+            border-radius: 30px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.2s;
+            background: #e2e8f0;
+            color: #475569;
+            border: 2px solid transparent;
+        }
+        .toggle-btn:hover {
+            background: #cbd5e1;
+        }
+        .toggle-btn.active {
+            background: white;
+            color: #0b1a33;
+            border-color: #1f2a44;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+        }
+        .toggle-btn.active[data-dataset="0"] {
+            border-color: #2563eb;
+            color: #2563eb;
+        }
+        .toggle-btn.active[data-dataset="1"] {
+            border-color: #f97316;
+            color: #f97316;
+        }
+        .toggle-btn.active[data-dataset="2"] {
+            border-color: #22c55e;
+            color: #22c55e;
+        }
+        .toggle-btn .color-dot {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 4px;
+            vertical-align: middle;
+        }
+        .toggle-btn .color-dot.dot-blue {
+            background: #2563eb;
+        }
+        .toggle-btn .color-dot.dot-orange {
+            background: #f97316;
+        }
+        .toggle-btn .color-dot.dot-green {
+            background: #22c55e;
         }
 
         .log-area {
@@ -298,6 +375,13 @@
             .chart-container canvas {
                 height: 220px !important;
             }
+            .toggle-row {
+                padding: 0.5rem 0.8rem;
+            }
+            .toggle-btn {
+                padding: 0.25rem 0.9rem;
+                font-size: 0.7rem;
+            }
         }
     </style>
 </head>
@@ -311,6 +395,7 @@
             <br>3. Voltage 80V to 200V, maximum testable power 45W
         </div>
 
+        <!-- Status Bar -->
         <div class="status-bar">
             <div class="status-led">
                 <span class="led" id="statusLed"></span>
@@ -322,6 +407,7 @@
             </div>
         </div>
 
+        <!-- Live Data -->
         <div class="data-grid">
             <div class="data-item" id="voltageItem">
                 <div class="data-label">Voltage</div>
@@ -341,12 +427,12 @@
             </div>
         </div>
 
-        <!-- Graph -->
+        <!-- Chart -->
         <div class="chart-container">
             <canvas id="chartCanvas"></canvas>
         </div>
 
-        <!-- Controls -->
+        <!-- Chart Controls + Toggles -->
         <div class="chart-controls">
             <div class="chart-status">
                 <span class="dot recording" id="chartStatusDot"></span>
@@ -355,12 +441,27 @@
             <div class="btn-group">
                 <button class="btn btn-success" id="startChartBtn" disabled>▶️ Start</button>
                 <button class="btn btn-danger" id="stopChartBtn">⏹️ Stop</button>
-                <button class="btn btn-outline" id="clearChartBtn">🗑️ Clear Chart</button>
-                <button class="btn btn-outline" id="saveChartBtn">💾 Save Chart</button>
-                <button class="btn btn-outline" id="exportCsvBtn">📊 Export CSV</button>
+                <button class="btn btn-outline" id="clearChartBtn">🗑️ Clear</button>
+                <button class="btn btn-outline" id="saveChartBtn">💾 Save</button>
+                <button class="btn btn-outline" id="exportCsvBtn">📊 CSV</button>
             </div>
         </div>
 
+        <!-- Toggle Row: Voltage · Current · Capacity -->
+        <div class="toggle-row">
+            <span class="toggle-label">Show:</span>
+            <button class="toggle-btn active" data-dataset="0">
+                <span class="color-dot dot-blue"></span>Voltage
+            </button>
+            <button class="toggle-btn active" data-dataset="1">
+                <span class="color-dot dot-orange"></span>Current
+            </button>
+            <button class="toggle-btn active" data-dataset="2">
+                <span class="color-dot dot-green"></span>Capacity
+            </button>
+        </div>
+
+        <!-- Log -->
         <div class="flex-row">
             <span style="font-weight: 500; color: #1f2a44">📋 Log</span>
             <span class="hint" id="logTimestamp"></span>
@@ -407,6 +508,9 @@
             const chartStatusDot = document.getElementById('chartStatusDot');
             const chartStatusText = document.getElementById('chartStatusText');
 
+            // ---- Toggle buttons ----
+            const toggleBtns = document.querySelectorAll('.toggle-btn');
+
             // ----- BLE state -----
             let device = null;
             let characteristic = null;
@@ -417,12 +521,13 @@
             // ----- Recording state -----
             let isRecording = true;
 
-            // ----- Master data (for display and CSV) -----
-            const allTimeLabels = []; // human-readable local times (for graph)
+            // ----- Master data -----
+            const allTimeLabels = [];
             const allVoltage = [];
+            const allCurrent = [];
             const allCapacity = [];
-            const allIsoTimestamps = []; // YYYY-MM-DD HH:MM:SS (for CSV)
-            const allElapsedSeconds = []; // seconds from start (for CSV)
+            const allIsoTimestamps = [];
+            const allElapsedSeconds = [];
             let sessionStartTime = null;
 
             const MAX_RENDER_POINTS = 1500;
@@ -437,20 +542,32 @@
                         label: 'Voltage (V)',
                         data: allVoltage,
                         borderColor: '#2563eb',
-                        backgroundColor: 'rgba(37, 99, 235, 0.1)',
-                        borderWidth: 2,
+                        backgroundColor: 'rgba(37, 99, 235, 0.08)',
+                        borderWidth: 2.5,
                         pointRadius: 0,
                         tension: 0.2,
-                        yAxisID: 'yVoltage',
+                        yAxisID: 'yVoltage', // Left axis
+                        hidden: false,
+                    }, {
+                        label: 'Current (A)',
+                        data: allCurrent,
+                        borderColor: '#f97316',
+                        backgroundColor: 'rgba(249, 115, 22, 0.08)',
+                        borderWidth: 2.5,
+                        pointRadius: 0,
+                        tension: 0.2,
+                        yAxisID: 'yCapacity', // ✅ CHANGED: now on right axis
+                        hidden: false,
                     }, {
                         label: 'Capacity (Ah)',
                         data: allCapacity,
                         borderColor: '#22c55e',
-                        backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                        borderWidth: 2,
+                        backgroundColor: 'rgba(34, 197, 94, 0.08)',
+                        borderWidth: 2.5,
                         pointRadius: 0,
                         tension: 0.2,
-                        yAxisID: 'yCapacity',
+                        yAxisID: 'yCapacity', // Right axis
+                        hidden: false,
                     }]
                 },
                 options: {
@@ -467,32 +584,45 @@
                         yVoltage: {
                             type: 'linear',
                             position: 'left',
-                            ticks: { font: { size: 9 }, callback: (val) => val.toFixed(1) + 'V' },
+                            ticks: { font: { size: 9 }, callback: (val) => val.toFixed(2) + 'V' },
                             grid: { color: '#e7edf8' },
-                            title: { display: true, text: 'Voltage', color: '#2563eb', font: { size: 9 } }
+                            title: {
+                                display: true,
+                                text: 'Voltage',
+                                color: '#2563eb',
+                                font: { size: 9 }
+                            }
                         },
                         yCapacity: {
                             type: 'linear',
                             position: 'right',
-                            ticks: { font: { size: 9 }, callback: (val) => val.toFixed(2) + 'Ah' },
+                            ticks: { font: { size: 9 }, callback: (val) => val.toFixed(2) },
                             grid: { drawOnChartArea: false },
-                            title: { display: true, text: 'Capacity', color: '#22c55e', font: { size: 9 } }
+                            title: {
+                                display: true,
+                                text: 'Current / Capacity', // Updated label
+                                color: '#f97316',
+                                font: { size: 9 }
+                            }
                         }
                     },
                     plugins: {
                         legend: {
-                            labels: { boxWidth: 12, padding: 8, font: { size: 9 } }
+                            labels: { boxWidth: 14, padding: 10, font: { size: 10 } }
                         },
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
                                     let label = context.dataset.label || '';
                                     let val = context.parsed.y;
-                                    if (context.dataset.yAxisID === 'yVoltage') {
+                                    if (context.datasetIndex === 0) {
                                         return label + ': ' + val.toFixed(2) + ' V';
-                                    } else {
+                                    } else if (context.datasetIndex === 1) {
+                                        return label + ': ' + val.toFixed(3) + ' A';
+                                    } else if (context.datasetIndex === 2) {
                                         return label + ': ' + val.toFixed(3) + ' Ah';
                                     }
+                                    return label + ': ' + val.toFixed(3);
                                 }
                             }
                         }
@@ -500,33 +630,71 @@
                 }
             });
 
+            // ----- Sync toggles with chart visibility -----
+            function syncTogglesFromChart() {
+                const ds = chart.data.datasets;
+                toggleBtns.forEach((btn, idx) => {
+                    if (idx < ds.length) {
+                        const isHidden = ds[idx].hidden;
+                        if (isHidden) btn.classList.remove('active');
+                        else btn.classList.add('active');
+                    }
+                });
+            }
+
+            function toggleDataset(index) {
+                const ds = chart.data.datasets;
+                if (index >= ds.length) return;
+                ds[index].hidden = !ds[index].hidden;
+                chart.update('none');
+                const btn = toggleBtns[index];
+                if (btn) {
+                    if (ds[index].hidden) btn.classList.remove('active');
+                    else btn.classList.add('active');
+                }
+                const name = ds[index].label || 'Dataset';
+                addLog(`👁️ ${name} ${ds[index].hidden ? 'hidden' : 'shown'}`);
+            }
+
+            toggleBtns.forEach((btn, idx) => {
+                btn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    toggleDataset(idx);
+                });
+            });
+
             // ----- Update chart (with downsampling) -----
             function updateChart() {
                 let renderLabels = allTimeLabels;
                 let renderVoltage = allVoltage;
+                let renderCurrent = allCurrent;
                 let renderCapacity = allCapacity;
 
                 if (allTimeLabels.length > MAX_RENDER_POINTS) {
                     const step = Math.floor(allTimeLabels.length / MAX_RENDER_POINTS);
                     renderLabels = [];
                     renderVoltage = [];
+                    renderCurrent = [];
                     renderCapacity = [];
                     for (let i = 0; i < allTimeLabels.length; i += step) {
                         renderLabels.push(allTimeLabels[i]);
                         renderVoltage.push(allVoltage[i]);
+                        renderCurrent.push(allCurrent[i]);
                         renderCapacity.push(allCapacity[i]);
                     }
                     const lastIdx = allTimeLabels.length - 1;
                     if (renderLabels[renderLabels.length - 1] !== allTimeLabels[lastIdx]) {
                         renderLabels.push(allTimeLabels[lastIdx]);
                         renderVoltage.push(allVoltage[lastIdx]);
+                        renderCurrent.push(allCurrent[lastIdx]);
                         renderCapacity.push(allCapacity[lastIdx]);
                     }
                 }
 
                 chart.data.labels = renderLabels;
                 chart.data.datasets[0].data = renderVoltage;
-                chart.data.datasets[1].data = renderCapacity;
+                chart.data.datasets[1].data = renderCurrent;
+                chart.data.datasets[2].data = renderCapacity;
                 chart.update('none');
             }
 
@@ -596,27 +764,23 @@
                 if (updateCount % 5 === 0) {
                     addLog(
                         `📊 ${parsed.voltage.toFixed(1)}V ${parsed.current.toFixed(3)}A ${parsed.temp}°C ${parsed.capacity_Ah.toFixed(3)}Ah`
-                        );
+                    );
                 }
 
-                // Only store data if recording
                 if (isRecording) {
                     const now = new Date();
-
-                    // --- Graph display: human-readable local time ---
                     const timeStr = now.toLocaleTimeString();
                     allTimeLabels.push(timeStr);
 
-                    // --- CSV storage: ISO timestamp & elapsed seconds ---
                     if (!sessionStartTime) sessionStartTime = now;
-                    const isoStr = now.toISOString().replace('T', ' ').slice(0, 19); // YYYY-MM-DD HH:MM:SS
-                    const elapsed = (now - sessionStartTime) / 1000; // seconds
+                    const isoStr = now.toISOString().replace('T', ' ').slice(0, 19);
+                    const elapsed = (now - sessionStartTime) / 1000;
 
                     allIsoTimestamps.push(isoStr);
                     allElapsedSeconds.push(elapsed);
 
-                    // --- Values ---
                     allVoltage.push(parsed.voltage);
+                    allCurrent.push(parsed.current);
                     allCapacity.push(parsed.capacity_Ah);
 
                     updateChart();
@@ -762,13 +926,7 @@
                 if (isRecording) return;
                 isRecording = true;
                 updateRecordingUI();
-                // Reset session timer so elapsed seconds stay continuous
-                // Only reset if we have data? Better: keep it running.
-                // If we just resumed, we don't want to reset the start time, or elapsed becomes invalid.
-                // We'll set it only if it's null.
                 if (!sessionStartTime && allTimeLabels.length > 0) {
-                    // If we already have data but no start time, create one from first timestamp.
-                    // Simple: if sessionStartTime is null, set it to now.
                     sessionStartTime = new Date();
                 }
                 addLog('▶️ Chart recording resumed');
@@ -784,6 +942,7 @@
             function clearChart() {
                 allTimeLabels.length = 0;
                 allVoltage.length = 0;
+                allCurrent.length = 0;
                 allCapacity.length = 0;
                 allIsoTimestamps.length = 0;
                 allElapsedSeconds.length = 0;
@@ -792,34 +951,35 @@
                 addLog('🗑️ Chart data cleared');
             }
 
-            // ----- SIMPLE PNG SAVE (no canvas resizing) -----
             function saveChart() {
                 const link = document.createElement('a');
-                link.download = `DL24_chart_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.png`;
+                link.download =
+                    `DL24_chart_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.png`;
                 link.href = chart.toBase64Image('image/png', 1.0);
                 link.click();
                 addLog('💾 Chart saved as PNG');
             }
 
-            // ----- CSV EXPORT (ISO timestamp + elapsed seconds) -----
             function exportCsv() {
                 if (allTimeLabels.length === 0) {
                     addLog('⚠️ No data to export', true);
                     return;
                 }
 
-                let csv = 'Timestamp (ISO), Elapsed (s), Voltage (V), Capacity (Ah)\n';
+                let csv = 'Timestamp (ISO), Elapsed (s), Voltage (V), Current (A), Capacity (Ah)\n';
                 for (let i = 0; i < allTimeLabels.length; i++) {
                     const ts = allIsoTimestamps[i] || '';
                     const elapsed = allElapsedSeconds[i] !== undefined ? allElapsedSeconds[i].toFixed(1) : '';
                     const v = allVoltage[i].toFixed(3);
+                    const c = allCurrent[i].toFixed(3);
                     const cap = allCapacity[i].toFixed(3);
-                    csv += `${ts}, ${elapsed}, ${v}, ${cap}\n`;
+                    csv += `${ts}, ${elapsed}, ${v}, ${c}, ${cap}\n`;
                 }
 
                 const blob = new Blob([csv], { type: 'text/csv' });
                 const link = document.createElement('a');
-                link.download = `DL24_data_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.csv`;
+                link.download =
+                    `DL24_data_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.csv`;
                 link.href = URL.createObjectURL(blob);
                 link.click();
                 URL.revokeObjectURL(link.href);
@@ -853,6 +1013,7 @@
                     try { device.gatt.disconnect(); } catch (_) {}
                 }
             });
+
         })();
     </script>
 </body>
