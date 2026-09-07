@@ -160,21 +160,21 @@
             background: #f0fdf4;
         }
         .data-label {
-            font-size: 0.7rem;
+            font-size: 1.0rem;
             text-transform: uppercase;
             letter-spacing: 0.04em;
             color: #5f7393;
             font-weight: 600;
         }
         .data-value {
-            font-size: 1.5rem;
+            font-size: 2.5rem;
             font-weight: 600;
             color: #0b1a33;
             margin: 0.3rem 0 0.1rem;
             font-variant-numeric: tabular-nums;
         }
         .data-unit {
-            font-size: 0.75rem;
+            font-size: 0.95rem;
             color: #64748b;
             margin-left: 0.1rem;
             font-weight: 400;
@@ -577,38 +577,38 @@
                     scales: {
                         x: {
                             type: 'category',
-                            ticks: { maxTicksLimit: 20, font: { size: 9 }, maxRotation: 0, autoSkip: true },
+                            ticks: { maxTicksLimit: 10, font: { size: 11 }, maxRotation: 0, autoSkip: true },
                             grid: { display: false },
-                            title: { display: true, text: 'Time', color: '#5f7393', font: { size: 9 } }
+                            title: { display: true, text: 'Time', color: '#5f7393', font: { size: 13 } }
                         },
                         yVoltage: {
                             type: 'linear',
                             position: 'left',
-                            ticks: { font: { size: 9 }, callback: (val) => val.toFixed(2) + 'V' },
+                            ticks: { font: { size: 11 }, callback: (val) => val.toFixed(2) + 'V' },
                             grid: { color: '#e7edf8' },
                             title: {
                                 display: true,
                                 text: 'Voltage',
                                 color: '#2563eb',
-                                font: { size: 9 }
+                                font: { size: 13 }
                             }
                         },
                         yCapacity: {
                             type: 'linear',
                             position: 'right',
-                            ticks: { font: { size: 9 }, callback: (val) => val.toFixed(2) },
+                            ticks: { font: { size: 11 }, callback: (val) => val.toFixed(2) },
                             grid: { drawOnChartArea: false },
                             title: {
                                 display: true,
                                 text: 'Current / Capacity', // Updated label
                                 color: '#f97316',
-                                font: { size: 9 }
+                                font: { size: 13 }
                             }
                         }
                     },
                     plugins: {
                         legend: {
-                            labels: { boxWidth: 14, padding: 10, font: { size: 10 } }
+                            labels: { boxWidth: 14, padding: 10, font: { size: 13 } }
                         },
                         tooltip: {
                             callbacks: {
