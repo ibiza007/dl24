@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Atorch DL24 · BLE + Graph</title>
+    <title>Atorch DL24 · BLE</title>
 
-    <!-- Chart.js CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 
     <style>
@@ -118,6 +117,24 @@
         .btn-outline:hover:not(:disabled) {
             background: #f1f5f9;
         }
+        .btn-success {
+            background: #22c55e;
+            border-color: #22c55e;
+            color: white;
+        }
+        .btn-success:hover:not(:disabled) {
+            background: #16a34a;
+            transform: scale(0.97);
+        }
+        .btn-danger {
+            background: #ef4444;
+            border-color: #ef4444;
+            color: white;
+        }
+        .btn-danger:hover:not(:disabled) {
+            background: #dc2626;
+            transform: scale(0.97);
+        }
         .btn-group {
             display: flex;
             flex-wrap: wrap;
@@ -161,19 +178,56 @@
             margin-left: 0.1rem;
             font-weight: 400;
         }
+
+        /* Fixed-height chart – stable, no shrinking */
         .chart-container {
             background: #fafcff;
             border-radius: 20px;
-            padding: 1rem 1rem 0.5rem 1rem;
+            padding: 1rem;
             margin: 1.8rem 0 1.5rem;
             border: 1px solid #e7edf8;
-            position: relative;
-            height: 220px;
         }
         .chart-container canvas {
             width: 100% !important;
-            height: 100% !important;
+            height: 320px !important;
+            display: block;
         }
+
+        .chart-controls {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.8rem;
+            margin: -0.5rem 0 1.2rem 0;
+        }
+        .chart-status {
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: #5f7393;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .chart-status .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .dot.recording {
+            background: #22c55e;
+            animation: pulse 1.2s infinite;
+        }
+        .dot.paused {
+            background: #f59e0b;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.8); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+
         .log-area {
             background: #0b1a33;
             color: #b9d0f0;
@@ -233,6 +287,7 @@
             text-align: center;
             margin-top: 0.5rem;
         }
+
         @media (max-width: 600px) {
             .card {
                 padding: 1.5rem;
@@ -240,8 +295,8 @@
             .data-grid {
                 grid-template-columns: repeat(2, 1fr);
             }
-            .chart-container {
-                height: 160px;
+            .chart-container canvas {
+                height: 220px !important;
             }
         }
     </style>
@@ -250,7 +305,10 @@
     <div class="card">
         <h1><span>⚡ Atorch DL24</span> <span class="badge badge-success">✓ Verified</span></h1>
         <div class="subhead">
-            Raw packets logged · Capacity in Ah
+            Atorch DL24 Power testing range, to avoid product damage!
+            <br>1. Voltage < 36V, maximum testable power of 150W
+            <br>2. Voltage>36V,<80V, maximum testable power of 60W
+            <br>3. Voltage>80V,<200V, maximum testable power of 45W
         </div>
 
         <div class="status-bar">
@@ -283,9 +341,24 @@
             </div>
         </div>
 
-        <!-- Graph container -->
+        <!-- Graph -->
         <div class="chart-container">
             <canvas id="chartCanvas"></canvas>
+        </div>
+
+        <!-- Controls -->
+        <div class="chart-controls">
+            <div class="chart-status">
+                <span class="dot recording" id="chartStatusDot"></span>
+                <span id="chartStatusText">Recording</span>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-success" id="startChartBtn" disabled>▶️ Start</button>
+                <button class="btn btn-danger" id="stopChartBtn">⏹️ Stop</button>
+                <button class="btn btn-outline" id="clearChartBtn">🗑️ Clear Chart</button>
+                <button class="btn btn-outline" id="saveChartBtn">💾 Save Chart</button>
+                <button class="btn btn-outline" id="exportCsvBtn">📊 Export CSV</button>
+            </div>
         </div>
 
         <div class="flex-row">
@@ -326,6 +399,14 @@
             const logArea = document.getElementById('logArea');
             const logTimestamp = document.getElementById('logTimestamp');
 
+            const startChartBtn = document.getElementById('startChartBtn');
+            const stopChartBtn = document.getElementById('stopChartBtn');
+            const clearChartBtn = document.getElementById('clearChartBtn');
+            const saveChartBtn = document.getElementById('saveChartBtn');
+            const exportCsvBtn = document.getElementById('exportCsvBtn');
+            const chartStatusDot = document.getElementById('chartStatusDot');
+            const chartStatusText = document.getElementById('chartStatusText');
+
             // ----- BLE state -----
             let device = null;
             let characteristic = null;
@@ -333,21 +414,28 @@
             let buffer = new Uint8Array();
             let updateCount = 0;
 
-            // ----- Chart data -----
-            const MAX_POINTS = 300;
-            const timeLabels = [];
-            const voltageData = [];
-            const capacityData = [];
+            // ----- Recording state -----
+            let isRecording = true;
 
-            // ----- Chart.js setup (AUTO-SCALING AXES) -----
+            // ----- Master data (for display and CSV) -----
+            const allTimeLabels = []; // human-readable local times (for graph)
+            const allVoltage = [];
+            const allCapacity = [];
+            const allIsoTimestamps = []; // YYYY-MM-DD HH:MM:SS (for CSV)
+            const allElapsedSeconds = []; // seconds from start (for CSV)
+            let sessionStartTime = null;
+
+            const MAX_RENDER_POINTS = 1500;
+
+            // ----- Chart -----
             const ctx = document.getElementById('chartCanvas').getContext('2d');
             const chart = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: timeLabels,
+                    labels: allTimeLabels,
                     datasets: [{
                         label: 'Voltage (V)',
-                        data: voltageData,
+                        data: allVoltage,
                         borderColor: '#2563eb',
                         backgroundColor: 'rgba(37, 99, 235, 0.1)',
                         borderWidth: 2,
@@ -356,7 +444,7 @@
                         yAxisID: 'yVoltage',
                     }, {
                         label: 'Capacity (Ah)',
-                        data: capacityData,
+                        data: allCapacity,
                         borderColor: '#22c55e',
                         backgroundColor: 'rgba(34, 197, 94, 0.1)',
                         borderWidth: 2,
@@ -368,66 +456,32 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    animation: {
-                        duration: 0 // real‑time updates without animation jitter
-                    },
+                    animation: { duration: 0 },
                     scales: {
                         x: {
                             type: 'category',
-                            ticks: {
-                                maxTicksLimit: 20,
-                                font: { size: 9 },
-                                maxRotation: 0,
-                                autoSkip: true,
-                            },
+                            ticks: { maxTicksLimit: 20, font: { size: 9 }, maxRotation: 0, autoSkip: true },
                             grid: { display: false },
-                            title: {
-                                display: true,
-                                text: 'Time (seconds ago)',
-                                color: '#5f7393',
-                                font: { size: 9 }
-                            }
+                            title: { display: true, text: 'Time', color: '#5f7393', font: { size: 9 } }
                         },
                         yVoltage: {
                             type: 'linear',
                             position: 'left',
-                            // AUTO-SCALE: no min/max set
-                            ticks: {
-                                font: { size: 9 },
-                                callback: (val) => val.toFixed(1) + 'V'
-                            },
+                            ticks: { font: { size: 9 }, callback: (val) => val.toFixed(1) + 'V' },
                             grid: { color: '#e7edf8' },
-                            title: {
-                                display: true,
-                                text: 'Voltage',
-                                color: '#2563eb',
-                                font: { size: 9 }
-                            }
+                            title: { display: true, text: 'Voltage', color: '#2563eb', font: { size: 9 } }
                         },
                         yCapacity: {
                             type: 'linear',
                             position: 'right',
-                            // AUTO-SCALE: no min/max/suggestedMax set
-                            ticks: {
-                                font: { size: 9 },
-                                callback: (val) => val.toFixed(2) + 'Ah'
-                            },
+                            ticks: { font: { size: 9 }, callback: (val) => val.toFixed(2) + 'Ah' },
                             grid: { drawOnChartArea: false },
-                            title: {
-                                display: true,
-                                text: 'Capacity',
-                                color: '#22c55e',
-                                font: { size: 9 }
-                            }
+                            title: { display: true, text: 'Capacity', color: '#22c55e', font: { size: 9 } }
                         }
                     },
                     plugins: {
                         legend: {
-                            labels: {
-                                boxWidth: 12,
-                                padding: 8,
-                                font: { size: 9 }
-                            }
+                            labels: { boxWidth: 12, padding: 8, font: { size: 9 } }
                         },
                         tooltip: {
                             callbacks: {
@@ -446,7 +500,52 @@
                 }
             });
 
-            // ----- Helpers -----
+            // ----- Update chart (with downsampling) -----
+            function updateChart() {
+                let renderLabels = allTimeLabels;
+                let renderVoltage = allVoltage;
+                let renderCapacity = allCapacity;
+
+                if (allTimeLabels.length > MAX_RENDER_POINTS) {
+                    const step = Math.floor(allTimeLabels.length / MAX_RENDER_POINTS);
+                    renderLabels = [];
+                    renderVoltage = [];
+                    renderCapacity = [];
+                    for (let i = 0; i < allTimeLabels.length; i += step) {
+                        renderLabels.push(allTimeLabels[i]);
+                        renderVoltage.push(allVoltage[i]);
+                        renderCapacity.push(allCapacity[i]);
+                    }
+                    const lastIdx = allTimeLabels.length - 1;
+                    if (renderLabels[renderLabels.length - 1] !== allTimeLabels[lastIdx]) {
+                        renderLabels.push(allTimeLabels[lastIdx]);
+                        renderVoltage.push(allVoltage[lastIdx]);
+                        renderCapacity.push(allCapacity[lastIdx]);
+                    }
+                }
+
+                chart.data.labels = renderLabels;
+                chart.data.datasets[0].data = renderVoltage;
+                chart.data.datasets[1].data = renderCapacity;
+                chart.update('none');
+            }
+
+            // ----- UI recording status -----
+            function updateRecordingUI() {
+                if (isRecording) {
+                    chartStatusDot.className = 'dot recording';
+                    chartStatusText.textContent = 'Recording';
+                    startChartBtn.disabled = true;
+                    stopChartBtn.disabled = false;
+                } else {
+                    chartStatusDot.className = 'dot paused';
+                    chartStatusText.textContent = 'Paused';
+                    startChartBtn.disabled = false;
+                    stopChartBtn.disabled = true;
+                }
+            }
+
+            // ----- Logging -----
             function addLog(msg, isError = false) {
                 const timestamp = new Date().toLocaleTimeString();
                 const prefix = isError ? '⚠️' : '•';
@@ -459,21 +558,18 @@
                 }
             }
 
-            // ----- Packet decoder (unchanged) -----
+            // ----- Packet decoder -----
             function parseDL24Packet(data) {
                 const bytes = new Uint8Array(data);
                 if (bytes.length < 36) return null;
-
                 for (let i = 0; i <= bytes.length - 36; i++) {
                     if (bytes[i] === 0xFF && bytes[i + 1] === 0x55) {
                         const p = bytes.slice(i, i + 36);
                         if (p[3] !== 0x02) continue;
-
                         const voltage = p[6] / 10.0;
                         const current = ((p[8] << 8) | p[9]) / 1000.0;
                         const temp = (p[24] << 8) | p[25];
                         const capacity_Ah = ((p[13] << 8) | p[12]) / 100.0;
-
                         if (voltage >= 0 && voltage <= 30 && current >= 0) {
                             return { voltage, current, temp, capacity_Ah };
                         }
@@ -482,7 +578,7 @@
                 return null;
             }
 
-            // ----- Update display & chart -----
+            // ----- Update display + master data -----
             function updateDisplay(parsed) {
                 if (!parsed) return;
                 updateCount++;
@@ -503,25 +599,31 @@
                         );
                 }
 
-                // ---- Update chart ----
-                const now = new Date();
-                const timeStr = now.toLocaleTimeString(); // label
-                timeLabels.push(timeStr);
-                voltageData.push(parsed.voltage);
-                capacityData.push(parsed.capacity_Ah);
+                // Only store data if recording
+                if (isRecording) {
+                    const now = new Date();
 
-                // Keep only last MAX_POINTS
-                if (timeLabels.length > MAX_POINTS) {
-                    timeLabels.shift();
-                    voltageData.shift();
-                    capacityData.shift();
+                    // --- Graph display: human-readable local time ---
+                    const timeStr = now.toLocaleTimeString();
+                    allTimeLabels.push(timeStr);
+
+                    // --- CSV storage: ISO timestamp & elapsed seconds ---
+                    if (!sessionStartTime) sessionStartTime = now;
+                    const isoStr = now.toISOString().replace('T', ' ').slice(0, 19); // YYYY-MM-DD HH:MM:SS
+                    const elapsed = (now - sessionStartTime) / 1000; // seconds
+
+                    allIsoTimestamps.push(isoStr);
+                    allElapsedSeconds.push(elapsed);
+
+                    // --- Values ---
+                    allVoltage.push(parsed.voltage);
+                    allCapacity.push(parsed.capacity_Ah);
+
+                    updateChart();
                 }
-
-                // Update chart
-                chart.update();
             }
 
-            // ----- BLE data handler (unchanged) -----
+            // ----- BLE data handler -----
             function onDataReceived(event) {
                 if (!isConnected) return;
                 const value = event.target.value;
@@ -559,7 +661,7 @@
                 if (buffer.length > 1024) buffer = buffer.slice(-256);
             }
 
-            // ----- BLE connection functions -----
+            // ----- BLE connection -----
             async function startNotifications() {
                 if (!characteristic) return false;
                 try {
@@ -577,18 +679,15 @@
                     addLog('⚠️ Already connected', true);
                     return;
                 }
-
                 try {
                     const bleDevice = await navigator.bluetooth.requestDevice({
                         filters: [{ services: [0xFFE0] }],
                         optionalServices: [0xFFE0]
                     });
-
                     if (!bleDevice) {
                         addLog('❌ No device selected', true);
                         return;
                     }
-
                     addLog(`🔗 Connecting to ${bleDevice.name || 'DL24'}`);
                     const server = await bleDevice.gatt.connect();
                     const service = await server.getPrimaryService(0xFFE0);
@@ -611,9 +710,7 @@
                     } else {
                         addLog('⚠️ Notifications not active', true);
                     }
-
                     device.addEventListener('gattserverdisconnected', onDisconnected);
-
                 } catch (err) {
                     addLog(`❌ Connection error: ${err.message}`, true);
                     if (device && device.gatt) {
@@ -647,24 +744,100 @@
                 isConnected = false;
                 device = null;
                 buffer = new Uint8Array();
-
                 statusLed.className = 'led';
                 statusText.textContent = 'Disconnected';
                 connectBtn.disabled = false;
                 disconnectBtn.disabled = true;
-
                 addLog('🔌 Disconnected');
             }
 
+            // ----- Clear log -----
             function clearLog() {
                 logArea.textContent = '[system] Log cleared.';
                 logTimestamp.textContent = '';
+            }
+
+            // ----- Chart controls -----
+            function startRecording() {
+                if (isRecording) return;
+                isRecording = true;
+                updateRecordingUI();
+                // Reset session timer so elapsed seconds stay continuous
+                // Only reset if we have data? Better: keep it running.
+                // If we just resumed, we don't want to reset the start time, or elapsed becomes invalid.
+                // We'll set it only if it's null.
+                if (!sessionStartTime && allTimeLabels.length > 0) {
+                    // If we already have data but no start time, create one from first timestamp.
+                    // Simple: if sessionStartTime is null, set it to now.
+                    sessionStartTime = new Date();
+                }
+                addLog('▶️ Chart recording resumed');
+            }
+
+            function stopRecording() {
+                if (!isRecording) return;
+                isRecording = false;
+                updateRecordingUI();
+                addLog('⏹️ Chart recording paused');
+            }
+
+            function clearChart() {
+                allTimeLabels.length = 0;
+                allVoltage.length = 0;
+                allCapacity.length = 0;
+                allIsoTimestamps.length = 0;
+                allElapsedSeconds.length = 0;
+                sessionStartTime = null;
+                updateChart();
+                addLog('🗑️ Chart data cleared');
+            }
+
+            // ----- SIMPLE PNG SAVE (no canvas resizing) -----
+            function saveChart() {
+                const link = document.createElement('a');
+                link.download = `DL24_chart_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.png`;
+                link.href = chart.toBase64Image('image/png', 1.0);
+                link.click();
+                addLog('💾 Chart saved as PNG');
+            }
+
+            // ----- CSV EXPORT (ISO timestamp + elapsed seconds) -----
+            function exportCsv() {
+                if (allTimeLabels.length === 0) {
+                    addLog('⚠️ No data to export', true);
+                    return;
+                }
+
+                let csv = 'Timestamp (ISO), Elapsed (s), Voltage (V), Capacity (Ah)\n';
+                for (let i = 0; i < allTimeLabels.length; i++) {
+                    const ts = allIsoTimestamps[i] || '';
+                    const elapsed = allElapsedSeconds[i] !== undefined ? allElapsedSeconds[i].toFixed(1) : '';
+                    const v = allVoltage[i].toFixed(3);
+                    const cap = allCapacity[i].toFixed(3);
+                    csv += `${ts}, ${elapsed}, ${v}, ${cap}\n`;
+                }
+
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const link = document.createElement('a');
+                link.download = `DL24_data_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.csv`;
+                link.href = URL.createObjectURL(blob);
+                link.click();
+                URL.revokeObjectURL(link.href);
+                addLog(`📊 CSV exported (${allTimeLabels.length} points)`);
             }
 
             // ----- Event binding -----
             connectBtn.addEventListener('click', connectDevice);
             disconnectBtn.addEventListener('click', disconnectDevice);
             clearLogBtn.addEventListener('click', clearLog);
+
+            startChartBtn.addEventListener('click', startRecording);
+            stopChartBtn.addEventListener('click', stopRecording);
+            clearChartBtn.addEventListener('click', clearChart);
+            saveChartBtn.addEventListener('click', saveChart);
+            exportCsvBtn.addEventListener('click', exportCsv);
+
+            updateRecordingUI();
 
             if (navigator.bluetooth) {
                 addLog('✅ Web Bluetooth available');
