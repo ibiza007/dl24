@@ -1,335 +1,686 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Atorch DL24 · BLE</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Atorch DL24 · BLE + Graph</title>
+
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+
     <style>
-        * { box-sizing: border-box; font-family: system-ui, sans-serif; }
-        body { background: #f5f7fc; min-height: 100vh; margin: 0; display: flex; align-items: center; justify-content: center; padding: 1rem; }
-        .card { max-width: 860px; width: 100%; background: white; border-radius: 2rem; box-shadow: 0 20px 40px rgba(0,0,0,0.08); padding: 2rem; }
-        h1 { font-size: 1.9rem; font-weight: 600; margin: 0 0 0.25rem 0; color: #0b1a33; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
-        .subhead { color: #4a5a72; margin-top: -0.2rem; margin-bottom: 2rem; font-size: 0.95rem; border-left: 4px solid #22c55e; padding-left: 1rem; background: #f0fdf4; border-radius: 0 12px 12px 0; line-height: 1.5; }
-        .status-bar { background: #eef2f8; border-radius: 40px; padding: 0.8rem 1.6rem; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; margin-bottom: 2rem; gap: 0.75rem; }
-        .status-led { display: flex; align-items: center; gap: 0.7rem; font-weight: 500; color: #1e2a41; }
-        .led { width: 14px; height: 14px; border-radius: 50%; background: #9aa6b9; transition: 0.25s; box-shadow: inset 0 1px 3px rgba(0,0,0,0.2); }
-        .led.active { background: #22c55e; box-shadow: 0 0 10px #22c55e88; }
-        .led.error { background: #ef4444; box-shadow: 0 0 10px #ef444488; }
-        .btn { background: white; border: none; padding: 0.6rem 1.3rem; border-radius: 40px; font-weight: 500; font-size: 0.9rem; color: #1f2a44; border: 1px solid #d0d9e8; cursor: pointer; transition: 0.15s; }
-        .btn-primary { background: #1f2a44; border-color: #1f2a44; color: white; box-shadow: 0 4px 10px rgba(28,52,84,0.2); }
-        .btn-primary:hover:not(:disabled) { background: #2b3b5e; transform: scale(0.97); }
-        .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
-        .btn-outline { background: transparent; }
-        .btn-outline:hover:not(:disabled) { background: #f1f5f9; }
-        .btn-group { display: flex; flex-wrap: wrap; gap: 0.65rem; }
-        .data-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin: 2rem 0 1.8rem; }
-        .data-item { background: #f8faff; border-radius: 20px; padding: 0.9rem 0.4rem 0.7rem; text-align: center; border: 1px solid #e7edf8; transition: 0.2s; }
-        .data-item.active { border-color: #22c55e; background: #f0fdf4; }
-        .data-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; color: #5f7393; font-weight: 600; }
-        .data-value { font-size: 1.5rem; font-weight: 600; color: #0b1a33; margin: 0.3rem 0 0.1rem; font-variant-numeric: tabular-nums; }
-        .data-unit { font-size: 0.75rem; color: #64748b; margin-left: 0.1rem; font-weight: 400; }
-        .log-area { background: #0b1a33; color: #b9d0f0; border-radius: 20px; padding: 1rem 1.4rem; font-family: 'Menlo','Consolas',monospace; font-size: 0.75rem; line-height: 1.6; max-height: 200px; overflow-y: auto; margin-top: 0.5rem; border: 1px solid #1f3450; white-space: pre-wrap; word-break: break-all; }
-        .log-area::-webkit-scrollbar { width: 6px; background: #14273e; border-radius: 10px; }
-        .log-area::-webkit-scrollbar-thumb { background: #3a5a82; border-radius: 10px; }
-        .flex-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; margin-top: 0.8rem; gap: 0.8rem; }
-        .hint { font-size: 0.8rem; color: #5f7393; }
-        .badge { background: #dbeafe; color: #1e3b77; padding: 0.25rem 0.9rem; border-radius: 30px; font-size: 0.7rem; font-weight: 600; }
-        .badge-success { background: #dcfce7; color: #166534; }
-        hr { border: none; border-top: 1px solid #dee7f2; margin: 1.5rem 0 1rem; }
-        .credit { font-size: 0.7rem; color: #6b7f9a; text-align: center; margin-top: 0.5rem; }
-        @media (max-width: 600px) { .card { padding: 1.5rem; } .data-grid { grid-template-columns: repeat(2, 1fr); } }
+        * {
+            box-sizing: border-box;
+            font-family: system-ui, sans-serif;
+        }
+        body {
+            background: #f5f7fc;
+            min-height: 100vh;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+        .card {
+            max-width: 860px;
+            width: 100%;
+            background: white;
+            border-radius: 2rem;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08);
+            padding: 2rem;
+        }
+        h1 {
+            font-size: 1.9rem;
+            font-weight: 600;
+            margin: 0 0 0.25rem 0;
+            color: #0b1a33;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+        .subhead {
+            color: #4a5a72;
+            margin-top: -0.2rem;
+            margin-bottom: 2rem;
+            font-size: 0.95rem;
+            border-left: 4px solid #22c55e;
+            padding-left: 1rem;
+            background: #f0fdf4;
+            border-radius: 0 12px 12px 0;
+            line-height: 1.5;
+        }
+        .status-bar {
+            background: #eef2f8;
+            border-radius: 40px;
+            padding: 0.8rem 1.6rem;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 2rem;
+            gap: 0.75rem;
+        }
+        .status-led {
+            display: flex;
+            align-items: center;
+            gap: 0.7rem;
+            font-weight: 500;
+            color: #1e2a41;
+        }
+        .led {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #9aa6b9;
+            transition: 0.25s;
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
+        }
+        .led.active {
+            background: #22c55e;
+            box-shadow: 0 0 10px #22c55e88;
+        }
+        .led.error {
+            background: #ef4444;
+            box-shadow: 0 0 10px #ef444488;
+        }
+        .btn {
+            background: white;
+            border: none;
+            padding: 0.6rem 1.3rem;
+            border-radius: 40px;
+            font-weight: 500;
+            font-size: 0.9rem;
+            color: #1f2a44;
+            border: 1px solid #d0d9e8;
+            cursor: pointer;
+            transition: 0.15s;
+        }
+        .btn-primary {
+            background: #1f2a44;
+            border-color: #1f2a44;
+            color: white;
+            box-shadow: 0 4px 10px rgba(28, 52, 84, 0.2);
+        }
+        .btn-primary:hover:not(:disabled) {
+            background: #2b3b5e;
+            transform: scale(0.97);
+        }
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .btn-outline {
+            background: transparent;
+        }
+        .btn-outline:hover:not(:disabled) {
+            background: #f1f5f9;
+        }
+        .btn-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.65rem;
+        }
+        .data-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1rem;
+            margin: 2rem 0 1.8rem;
+        }
+        .data-item {
+            background: #f8faff;
+            border-radius: 20px;
+            padding: 0.9rem 0.4rem 0.7rem;
+            text-align: center;
+            border: 1px solid #e7edf8;
+            transition: 0.2s;
+        }
+        .data-item.active {
+            border-color: #22c55e;
+            background: #f0fdf4;
+        }
+        .data-label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: #5f7393;
+            font-weight: 600;
+        }
+        .data-value {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #0b1a33;
+            margin: 0.3rem 0 0.1rem;
+            font-variant-numeric: tabular-nums;
+        }
+        .data-unit {
+            font-size: 0.75rem;
+            color: #64748b;
+            margin-left: 0.1rem;
+            font-weight: 400;
+        }
+        .chart-container {
+            background: #fafcff;
+            border-radius: 20px;
+            padding: 1rem 1rem 0.5rem 1rem;
+            margin: 1.8rem 0 1.5rem;
+            border: 1px solid #e7edf8;
+            position: relative;
+            height: 220px;
+        }
+        .chart-container canvas {
+            width: 100% !important;
+            height: 100% !important;
+        }
+        .log-area {
+            background: #0b1a33;
+            color: #b9d0f0;
+            border-radius: 20px;
+            padding: 1rem 1.4rem;
+            font-family: "Menlo", "Consolas", monospace;
+            font-size: 0.75rem;
+            line-height: 1.6;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 0.5rem;
+            border: 1px solid #1f3450;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .log-area::-webkit-scrollbar {
+            width: 6px;
+            background: #14273e;
+            border-radius: 10px;
+        }
+        .log-area::-webkit-scrollbar-thumb {
+            background: #3a5a82;
+            border-radius: 10px;
+        }
+        .flex-row {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 0.8rem;
+            gap: 0.8rem;
+        }
+        .hint {
+            font-size: 0.8rem;
+            color: #5f7393;
+        }
+        .badge {
+            background: #dbeafe;
+            color: #1e3b77;
+            padding: 0.25rem 0.9rem;
+            border-radius: 30px;
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+        .badge-success {
+            background: #dcfce7;
+            color: #166534;
+        }
+        hr {
+            border: none;
+            border-top: 1px solid #dee7f2;
+            margin: 1.5rem 0 1rem;
+        }
+        .credit {
+            font-size: 0.7rem;
+            color: #6b7f9a;
+            text-align: center;
+            margin-top: 0.5rem;
+        }
+        @media (max-width: 600px) {
+            .card {
+                padding: 1.5rem;
+            }
+            .data-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            .chart-container {
+                height: 160px;
+            }
+        }
     </style>
 </head>
 <body>
-<div class="card">
-    <h1><span>⚡ Atorch DL24</span> <span class="badge badge-success">✓ Verified</span></h1>
-    <div class="subhead">
-        Raw packets logged · Capacity in Ah
-    </div>
-
-    <div class="status-bar">
-        <div class="status-led">
-            <span class="led" id="statusLed"></span>
-            <span id="statusText">Disconnected</span>
+    <div class="card">
+        <h1><span>⚡ Atorch DL24</span> <span class="badge badge-success">✓ Verified</span></h1>
+        <div class="subhead">
+            Raw packets logged · Capacity in Ah
         </div>
-        <div class="btn-group">
-            <button class="btn btn-primary" id="connectBtn">🔗 Connect</button>
-            <button class="btn btn-outline" id="disconnectBtn" disabled>⛔ Disconnect</button>
+
+        <div class="status-bar">
+            <div class="status-led">
+                <span class="led" id="statusLed"></span>
+                <span id="statusText">Disconnected</span>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-primary" id="connectBtn">🔗 Connect</button>
+                <button class="btn btn-outline" id="disconnectBtn" disabled>⛔ Disconnect</button>
+            </div>
+        </div>
+
+        <div class="data-grid">
+            <div class="data-item" id="voltageItem">
+                <div class="data-label">Voltage</div>
+                <div class="data-value"><span id="voltage">--</span><span class="data-unit">V</span></div>
+            </div>
+            <div class="data-item" id="currentItem">
+                <div class="data-label">Current</div>
+                <div class="data-value"><span id="current">--</span><span class="data-unit">A</span></div>
+            </div>
+            <div class="data-item" id="tempItem">
+                <div class="data-label">Temperature</div>
+                <div class="data-value"><span id="temp">--</span><span class="data-unit">°C</span></div>
+            </div>
+            <div class="data-item" id="capacityItem">
+                <div class="data-label">Capacity</div>
+                <div class="data-value"><span id="capacity">--</span><span class="data-unit">Ah</span></div>
+            </div>
+        </div>
+
+        <!-- Graph container -->
+        <div class="chart-container">
+            <canvas id="chartCanvas"></canvas>
+        </div>
+
+        <div class="flex-row">
+            <span style="font-weight: 500; color: #1f2a44">📋 Log</span>
+            <span class="hint" id="logTimestamp"></span>
+        </div>
+        <div class="log-area" id="logArea">[system] Ready. Press "Connect" to pair with DL24.</div>
+
+        <hr />
+        <div style="display: flex; flex-wrap: wrap; gap: 0.8rem; align-items: center; justify-content: space-between">
+            <button class="btn btn-outline" id="clearLogBtn">🧹 Clear log</button>
+            <span style="font-size: 0.75rem; color: #6b7f9a">DL24 BLE · Service: FFE0</span>
+        </div>
+        <div class="credit">
+            Offsets: Voltage=byte6/10 · Current=bytes8-9 BE/1000 · Temp=bytes24-25 BE · Capacity=bytes13-12 LE/1000 Ah
         </div>
     </div>
 
-    <div class="data-grid">
-        <div class="data-item" id="voltageItem"><div class="data-label">Voltage</div><div class="data-value"><span id="voltage">--</span><span class="data-unit">V</span></div></div>
-        <div class="data-item" id="currentItem"><div class="data-label">Current</div><div class="data-value"><span id="current">--</span><span class="data-unit">A</span></div></div>
-        <div class="data-item" id="tempItem"><div class="data-label">Temperature</div><div class="data-value"><span id="temp">--</span><span class="data-unit">°C</span></div></div>
-        <div class="data-item" id="capacityItem"><div class="data-label">Capacity</div><div class="data-value"><span id="capacity">--</span><span class="data-unit">Ah</span></div></div>
-    </div>
+    <script>
+        (function() {
+            // ----- DOM refs -----
+            const statusLed = document.getElementById('statusLed');
+            const statusText = document.getElementById('statusText');
+            const connectBtn = document.getElementById('connectBtn');
+            const disconnectBtn = document.getElementById('disconnectBtn');
+            const clearLogBtn = document.getElementById('clearLogBtn');
 
-    <div class="flex-row">
-        <span style="font-weight:500; color:#1f2a44;">📋 Log</span>
-        <span class="hint" id="logTimestamp"></span>
-    </div>
-    <div class="log-area" id="logArea">[system] Ready. Press "Connect" to pair with DL24.</div>
+            const voltageEl = document.getElementById('voltage');
+            const currentEl = document.getElementById('current');
+            const tempEl = document.getElementById('temp');
+            const capacityEl = document.getElementById('capacity');
 
-    <hr>
-    <div style="display: flex; flex-wrap: wrap; gap: 0.8rem; align-items: center; justify-content: space-between;">
-        <button class="btn btn-outline" id="clearLogBtn">🧹 Clear log</button>
-        <span style="font-size:0.75rem; color:#6b7f9a;">DL24 BLE · Service: FFE0</span>
-    </div>
-    <div class="credit">
-        Offsets: Voltage=byte6/10 · Current=bytes8-9 BE/1000 · Temp=bytes24-25 BE · Capacity=bytes13-12 LE/1000 Ah
-    </div>
-</div>
+            const voltageItem = document.getElementById('voltageItem');
+            const currentItem = document.getElementById('currentItem');
+            const tempItem = document.getElementById('tempItem');
+            const capacityItem = document.getElementById('capacityItem');
 
-<script>
-    (function() {
-        const statusLed = document.getElementById('statusLed');
-        const statusText = document.getElementById('statusText');
-        const connectBtn = document.getElementById('connectBtn');
-        const disconnectBtn = document.getElementById('disconnectBtn');
-        const clearLogBtn = document.getElementById('clearLogBtn');
+            const logArea = document.getElementById('logArea');
+            const logTimestamp = document.getElementById('logTimestamp');
 
-        const voltageEl = document.getElementById('voltage');
-        const currentEl = document.getElementById('current');
-        const tempEl = document.getElementById('temp');
-        const capacityEl = document.getElementById('capacity');
+            // ----- BLE state -----
+            let device = null;
+            let characteristic = null;
+            let isConnected = false;
+            let buffer = new Uint8Array();
+            let updateCount = 0;
 
-        const voltageItem = document.getElementById('voltageItem');
-        const currentItem = document.getElementById('currentItem');
-        const tempItem = document.getElementById('tempItem');
-        const capacityItem = document.getElementById('capacityItem');
+            // ----- Chart data -----
+            const MAX_POINTS = 300;
+            const timeLabels = [];
+            const voltageData = [];
+            const capacityData = [];
 
-        const logArea = document.getElementById('logArea');
-        const logTimestamp = document.getElementById('logTimestamp');
-
-        let device = null;
-        let characteristic = null;
-        let isConnected = false;
-        let buffer = new Uint8Array();
-        let updateCount = 0;
-
-        function addLog(msg, isError = false) {
-            const timestamp = new Date().toLocaleTimeString();
-            const prefix = isError ? '⚠️' : '•';
-            logArea.textContent += `\n[${timestamp}] ${prefix} ${msg}`;
-            logArea.scrollTop = logArea.scrollHeight;
-            logTimestamp.textContent = timestamp;
-            if (logArea.textContent.split('\n').length > 200) {
-                const lines = logArea.textContent.split('\n');
-                logArea.textContent = lines.slice(-150).join('\n');
-            }
-        }
-
-        // ============================================
-        // VERIFIED DECODER – Big-Endian for Current & Temp, Little-Endian for Capacity
-        // ============================================
-        function parseDL24Packet(data) {
-            const bytes = new Uint8Array(data);
-            if (bytes.length < 36) return null;
-
-            for (let i = 0; i <= bytes.length - 36; i++) {
-                if (bytes[i] === 0xFF && bytes[i + 1] === 0x55) {
-                    const p = bytes.slice(i, i + 36);
-                    if (p[3] !== 0x02) continue;
-
-                    // Voltage: byte[6] ÷ 10
-                    const voltage = p[6] / 10.0;
-
-                    // Current: bytes[8-9] Big-Endian ÷ 1000
-                    const current = ((p[8] << 8) | p[9]) / 1000.0;
-
-                    // Temperature: bytes[24-25] Big-Endian
-                    const temp = (p[24] << 8) | p[25];
-
-                    // Capacity: bytes[12-13] Little-Endian ÷ 1000 (to get Ah)
-                    const capacity_Ah = ((p[13] << 8) | p[12]) / 100.0;
-
-                    if (voltage >= 0 && voltage <= 30 && current >= 0) {
-                        return { voltage, current, temp, capacity_Ah };
-                    }
-                }
-            }
-            return null;
-        }
-
-        function updateDisplay(parsed) {
-            if (!parsed) return;
-            updateCount++;
-            voltageEl.textContent = parsed.voltage.toFixed(1);
-            currentEl.textContent = parsed.current.toFixed(3);
-            tempEl.textContent = parsed.temp.toFixed(0);
-            capacityEl.textContent = parsed.capacity_Ah.toFixed(2);
-
-            [voltageItem, currentItem, tempItem, capacityItem].forEach(el => {
-                el.classList.add('active');
-                setTimeout(() => el.classList.remove('active'), 200);
-            });
-
-            if (updateCount % 5 === 0) {
-                addLog(`📊 ${parsed.voltage.toFixed(1)}V ${parsed.current.toFixed(3)}A ${parsed.temp}°C ${parsed.capacity_Ah.toFixed(3)}Ah`);
-            }
-        }
-
-        // Buffer handler with raw packet logging
-        function onDataReceived(event) {
-            if (!isConnected) return;
-            const value = event.target.value;
-            if (!value || value.byteLength === 0) return;
-
-            const newData = new Uint8Array(value.buffer);
-            const combined = new Uint8Array(buffer.length + newData.length);
-            combined.set(buffer);
-            combined.set(newData, buffer.length);
-            buffer = combined;
-
-            while (buffer.length >= 36) {
-                let found = false;
-                for (let i = 0; i <= buffer.length - 36; i++) {
-                    if (buffer[i] === 0xFF && buffer[i + 1] === 0x55) {
-                        const packet = buffer.slice(i, i + 36);
-                        // Log raw packet in hex
-                        const hex = Array.from(packet)
-                            .map(b => b.toString(16).padStart(2, '0').toUpperCase())
-                            .join(' ');
-                        addLog(`📦 ${hex}`, false);
-
-                        const parsed = parseDL24Packet(packet);
-                        if (parsed) {
-                            updateDisplay(parsed);
-                            buffer = buffer.slice(i + 36);
-                            found = true;
-                            break;
+            // ----- Chart.js setup (AUTO-SCALING AXES) -----
+            const ctx = document.getElementById('chartCanvas').getContext('2d');
+            const chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: timeLabels,
+                    datasets: [{
+                        label: 'Voltage (V)',
+                        data: voltageData,
+                        borderColor: '#2563eb',
+                        backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        tension: 0.2,
+                        yAxisID: 'yVoltage',
+                    }, {
+                        label: 'Capacity (Ah)',
+                        data: capacityData,
+                        borderColor: '#22c55e',
+                        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        tension: 0.2,
+                        yAxisID: 'yCapacity',
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: {
+                        duration: 0 // real‑time updates without animation jitter
+                    },
+                    scales: {
+                        x: {
+                            type: 'category',
+                            ticks: {
+                                maxTicksLimit: 20,
+                                font: { size: 9 },
+                                maxRotation: 0,
+                                autoSkip: true,
+                            },
+                            grid: { display: false },
+                            title: {
+                                display: true,
+                                text: 'Time (seconds ago)',
+                                color: '#5f7393',
+                                font: { size: 9 }
+                            }
+                        },
+                        yVoltage: {
+                            type: 'linear',
+                            position: 'left',
+                            // AUTO-SCALE: no min/max set
+                            ticks: {
+                                font: { size: 9 },
+                                callback: (val) => val.toFixed(1) + 'V'
+                            },
+                            grid: { color: '#e7edf8' },
+                            title: {
+                                display: true,
+                                text: 'Voltage',
+                                color: '#2563eb',
+                                font: { size: 9 }
+                            }
+                        },
+                        yCapacity: {
+                            type: 'linear',
+                            position: 'right',
+                            // AUTO-SCALE: no min/max/suggestedMax set
+                            ticks: {
+                                font: { size: 9 },
+                                callback: (val) => val.toFixed(2) + 'Ah'
+                            },
+                            grid: { drawOnChartArea: false },
+                            title: {
+                                display: true,
+                                text: 'Capacity',
+                                color: '#22c55e',
+                                font: { size: 9 }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: {
+                                boxWidth: 12,
+                                padding: 8,
+                                font: { size: 9 }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    let val = context.parsed.y;
+                                    if (context.dataset.yAxisID === 'yVoltage') {
+                                        return label + ': ' + val.toFixed(2) + ' V';
+                                    } else {
+                                        return label + ': ' + val.toFixed(3) + ' Ah';
+                                    }
+                                }
+                            }
                         }
                     }
                 }
-                if (!found) {
-                    buffer = buffer.slice(1);
+            });
+
+            // ----- Helpers -----
+            function addLog(msg, isError = false) {
+                const timestamp = new Date().toLocaleTimeString();
+                const prefix = isError ? '⚠️' : '•';
+                logArea.textContent += `\n[${timestamp}] ${prefix} ${msg}`;
+                logArea.scrollTop = logArea.scrollHeight;
+                logTimestamp.textContent = timestamp;
+                if (logArea.textContent.split('\n').length > 200) {
+                    const lines = logArea.textContent.split('\n');
+                    logArea.textContent = lines.slice(-150).join('\n');
                 }
             }
-            if (buffer.length > 1024) buffer = buffer.slice(-256);
-        }
 
-        // BLE connection functions
-        async function startNotifications() {
-            if (!characteristic) return false;
-            try {
-                await characteristic.startNotifications();
-                characteristic.addEventListener('characteristicvaluechanged', onDataReceived);
-                return true;
-            } catch (err) {
-                addLog(`❌ startNotifications error: ${err.message}`, true);
-                return false;
+            // ----- Packet decoder (unchanged) -----
+            function parseDL24Packet(data) {
+                const bytes = new Uint8Array(data);
+                if (bytes.length < 36) return null;
+
+                for (let i = 0; i <= bytes.length - 36; i++) {
+                    if (bytes[i] === 0xFF && bytes[i + 1] === 0x55) {
+                        const p = bytes.slice(i, i + 36);
+                        if (p[3] !== 0x02) continue;
+
+                        const voltage = p[6] / 10.0;
+                        const current = ((p[8] << 8) | p[9]) / 1000.0;
+                        const temp = (p[24] << 8) | p[25];
+                        const capacity_Ah = ((p[13] << 8) | p[12]) / 100.0;
+
+                        if (voltage >= 0 && voltage <= 30 && current >= 0) {
+                            return { voltage, current, temp, capacity_Ah };
+                        }
+                    }
+                }
+                return null;
             }
-        }
 
-        async function connectDevice() {
-            if (isConnected) {
-                addLog('⚠️ Already connected', true);
-                return;
-            }
+            // ----- Update display & chart -----
+            function updateDisplay(parsed) {
+                if (!parsed) return;
+                updateCount++;
 
-            try {
-                const bleDevice = await navigator.bluetooth.requestDevice({
-                    filters: [{ services: [0xFFE0] }],
-                    optionalServices: [0xFFE0]
+                voltageEl.textContent = parsed.voltage.toFixed(1);
+                currentEl.textContent = parsed.current.toFixed(3);
+                tempEl.textContent = parsed.temp.toFixed(0);
+                capacityEl.textContent = parsed.capacity_Ah.toFixed(2);
+
+                [voltageItem, currentItem, tempItem, capacityItem].forEach(el => {
+                    el.classList.add('active');
+                    setTimeout(() => el.classList.remove('active'), 200);
                 });
 
-                if (!bleDevice) {
-                    addLog('❌ No device selected', true);
+                if (updateCount % 5 === 0) {
+                    addLog(
+                        `📊 ${parsed.voltage.toFixed(1)}V ${parsed.current.toFixed(3)}A ${parsed.temp}°C ${parsed.capacity_Ah.toFixed(3)}Ah`
+                        );
+                }
+
+                // ---- Update chart ----
+                const now = new Date();
+                const timeStr = now.toLocaleTimeString(); // label
+                timeLabels.push(timeStr);
+                voltageData.push(parsed.voltage);
+                capacityData.push(parsed.capacity_Ah);
+
+                // Keep only last MAX_POINTS
+                if (timeLabels.length > MAX_POINTS) {
+                    timeLabels.shift();
+                    voltageData.shift();
+                    capacityData.shift();
+                }
+
+                // Update chart
+                chart.update();
+            }
+
+            // ----- BLE data handler (unchanged) -----
+            function onDataReceived(event) {
+                if (!isConnected) return;
+                const value = event.target.value;
+                if (!value || value.byteLength === 0) return;
+
+                const newData = new Uint8Array(value.buffer);
+                const combined = new Uint8Array(buffer.length + newData.length);
+                combined.set(buffer);
+                combined.set(newData, buffer.length);
+                buffer = combined;
+
+                while (buffer.length >= 36) {
+                    let found = false;
+                    for (let i = 0; i <= buffer.length - 36; i++) {
+                        if (buffer[i] === 0xFF && buffer[i + 1] === 0x55) {
+                            const packet = buffer.slice(i, i + 36);
+                            const hex = Array.from(packet)
+                                .map(b => b.toString(16).padStart(2, '0').toUpperCase())
+                                .join(' ');
+                            addLog(`📦 ${hex}`, false);
+
+                            const parsed = parseDL24Packet(packet);
+                            if (parsed) {
+                                updateDisplay(parsed);
+                                buffer = buffer.slice(i + 36);
+                                found = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!found) {
+                        buffer = buffer.slice(1);
+                    }
+                }
+                if (buffer.length > 1024) buffer = buffer.slice(-256);
+            }
+
+            // ----- BLE connection functions -----
+            async function startNotifications() {
+                if (!characteristic) return false;
+                try {
+                    await characteristic.startNotifications();
+                    characteristic.addEventListener('characteristicvaluechanged', onDataReceived);
+                    return true;
+                } catch (err) {
+                    addLog(`❌ startNotifications error: ${err.message}`, true);
+                    return false;
+                }
+            }
+
+            async function connectDevice() {
+                if (isConnected) {
+                    addLog('⚠️ Already connected', true);
                     return;
                 }
 
-                addLog(`🔗 Connecting to ${bleDevice.name || 'DL24'}`);
-                const server = await bleDevice.gatt.connect();
-                const service = await server.getPrimaryService(0xFFE0);
-                const char = await service.getCharacteristic(0xFFE1);
+                try {
+                    const bleDevice = await navigator.bluetooth.requestDevice({
+                        filters: [{ services: [0xFFE0] }],
+                        optionalServices: [0xFFE0]
+                    });
 
-                device = bleDevice;
-                characteristic = char;
-                isConnected = true;
-                buffer = new Uint8Array();
-                updateCount = 0;
+                    if (!bleDevice) {
+                        addLog('❌ No device selected', true);
+                        return;
+                    }
 
-                statusLed.className = 'led active';
-                statusText.textContent = `Connected · ${bleDevice.name || 'DL24'}`;
-                connectBtn.disabled = true;
-                disconnectBtn.disabled = false;
+                    addLog(`🔗 Connecting to ${bleDevice.name || 'DL24'}`);
+                    const server = await bleDevice.gatt.connect();
+                    const service = await server.getPrimaryService(0xFFE0);
+                    const char = await service.getCharacteristic(0xFFE1);
 
-                const ok = await startNotifications();
-                if (ok) {
-                    addLog('✅ Notifications active – logging raw packets');
-                } else {
-                    addLog('⚠️ Notifications not active', true);
+                    device = bleDevice;
+                    characteristic = char;
+                    isConnected = true;
+                    buffer = new Uint8Array();
+                    updateCount = 0;
+
+                    statusLed.className = 'led active';
+                    statusText.textContent = `Connected · ${bleDevice.name || 'DL24'}`;
+                    connectBtn.disabled = true;
+                    disconnectBtn.disabled = false;
+
+                    const ok = await startNotifications();
+                    if (ok) {
+                        addLog('✅ Notifications active – logging raw packets');
+                    } else {
+                        addLog('⚠️ Notifications not active', true);
+                    }
+
+                    device.addEventListener('gattserverdisconnected', onDisconnected);
+
+                } catch (err) {
+                    addLog(`❌ Connection error: ${err.message}`, true);
+                    if (device && device.gatt) {
+                        try { device.gatt.disconnect(); } catch (_) {}
+                    }
+                    device = null;
+                    characteristic = null;
+                    isConnected = false;
+                    statusLed.className = 'led error';
+                    statusText.textContent = 'Connection failed';
+                    connectBtn.disabled = false;
+                    disconnectBtn.disabled = true;
                 }
+            }
 
-                device.addEventListener('gattserverdisconnected', onDisconnected);
-
-            } catch (err) {
-                addLog(`❌ Connection error: ${err.message}`, true);
+            function disconnectDevice() {
                 if (device && device.gatt) {
                     try { device.gatt.disconnect(); } catch (_) {}
                 }
-                device = null;
-                characteristic = null;
+                if (characteristic) {
+                    try { characteristic.removeEventListener('characteristicvaluechanged', onDataReceived); } catch (_) {}
+                }
+                onDisconnected();
+            }
+
+            function onDisconnected() {
+                if (characteristic) {
+                    try { characteristic.removeEventListener('characteristicvaluechanged', onDataReceived); } catch (_) {}
+                    characteristic = null;
+                }
                 isConnected = false;
-                statusLed.className = 'led error';
-                statusText.textContent = 'Connection failed';
+                device = null;
+                buffer = new Uint8Array();
+
+                statusLed.className = 'led';
+                statusText.textContent = 'Disconnected';
                 connectBtn.disabled = false;
                 disconnectBtn.disabled = true;
+
+                addLog('🔌 Disconnected');
             }
-        }
 
-        function disconnectDevice() {
-            if (device && device.gatt) {
-                try { device.gatt.disconnect(); } catch (_) {}
+            function clearLog() {
+                logArea.textContent = '[system] Log cleared.';
+                logTimestamp.textContent = '';
             }
-            if (characteristic) {
-                try { characteristic.removeEventListener('characteristicvaluechanged', onDataReceived); } catch (_) {}
+
+            // ----- Event binding -----
+            connectBtn.addEventListener('click', connectDevice);
+            disconnectBtn.addEventListener('click', disconnectDevice);
+            clearLogBtn.addEventListener('click', clearLog);
+
+            if (navigator.bluetooth) {
+                addLog('✅ Web Bluetooth available');
+            } else {
+                addLog('❌ Web Bluetooth not supported in this browser', true);
+                connectBtn.disabled = true;
+                statusLed.className = 'led error';
+                statusText.textContent = 'Not supported';
             }
-            onDisconnected();
-        }
 
-        function onDisconnected() {
-            if (characteristic) {
-                try { characteristic.removeEventListener('characteristicvaluechanged', onDataReceived); } catch (_) {}
-                characteristic = null;
-            }
-            isConnected = false;
-            device = null;
-            buffer = new Uint8Array();
-
-            statusLed.className = 'led';
-            statusText.textContent = 'Disconnected';
-            connectBtn.disabled = false;
-            disconnectBtn.disabled = true;
-
-            addLog('🔌 Disconnected');
-        }
-
-        function clearLog() {
-            logArea.textContent = '[system] Log cleared.';
-            logTimestamp.textContent = '';
-        }
-
-        connectBtn.addEventListener('click', connectDevice);
-        disconnectBtn.addEventListener('click', disconnectDevice);
-        clearLogBtn.addEventListener('click', clearLog);
-
-        if (navigator.bluetooth) {
-            addLog('✅ Web Bluetooth available');
-        } else {
-            addLog('❌ Web Bluetooth not supported in this browser', true);
-            connectBtn.disabled = true;
-            statusLed.className = 'led error';
-            statusText.textContent = 'Not supported';
-        }
-
-        window.addEventListener('beforeunload', function() {
-            if (device && device.gatt) {
-                try { device.gatt.disconnect(); } catch (_) {}
-            }
-        });
-    })();
-</script>
+            window.addEventListener('beforeunload', function() {
+                if (device && device.gatt) {
+                    try { device.gatt.disconnect(); } catch (_) {}
+                }
+            });
+        })();
+    </script>
 </body>
 </html>
